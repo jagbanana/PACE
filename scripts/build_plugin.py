@@ -63,7 +63,7 @@ This is the Python source for the PACE MCP server, shipped inside the
 `uvx --from ${CLAUDE_PLUGIN_ROOT}/server pace-mcp` — users don't run
 this directly.
 
-Full project: <https://github.com/justingesso/pace>.
+Full project: <https://github.com/jagbanana/PACE>.
 """
 
 

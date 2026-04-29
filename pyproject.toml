@@ -45,7 +45,7 @@ pace = "pace.cli:main"
 pace-mcp = "pace.mcp_server:main"
 
 [project.urls]
-Homepage = "https://github.com/justingesso/pace"
+Homepage = "https://github.com/jagbanana/PACE"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pace"]

@@ -58,3 +58,14 @@ desktop.ini
 
 # --- Claude Cowork local state ---
 .claude/settings.local.json
+
+# --- Internal / maintainer-only docs (not shipped to public repo) ---
+# Kept on the maintainer's local disk for reference; never pushed.
+/PACE PRD.md
+/PACE Dev Plan.md
+/PACE Plugin Conversion Brief.md
+/CLAUDE.md
+# Scratch / draft notes the maintainer keeps alongside the source.
+/scratch/
+/notes/
+TODO.local.md

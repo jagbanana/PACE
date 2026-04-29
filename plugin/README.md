@@ -44,7 +44,7 @@ uv --version
 ### Step 1 — Get the `.plugin` file
 
 Download the latest `pace-memory.plugin` from the
-[PACE releases page](https://github.com/justingesso/pace/releases),
+[PACE releases page](https://github.com/jagbanana/PACE/releases),
 or build it from the source repo (`python scripts/build_plugin.py`,
 which writes `dist/pace-memory.plugin`).
 
@@ -381,4 +381,4 @@ MIT. See [LICENSE](LICENSE).
 
 ## Source and bug reports
 
-<https://github.com/justingesso/pace>
+<https://github.com/jagbanana/PACE>
