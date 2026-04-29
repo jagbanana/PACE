@@ -263,11 +263,97 @@ class Index:
         rows = self._conn.execute("SELECT path FROM files ORDER BY path").fetchall()
         return [r["path"] for r in rows]
 
+    def all_paths_with_ids(self) -> dict[str, int]:
+        """Path → file id, useful for bulk wikilink resolution."""
+        rows = self._conn.execute("SELECT id, path FROM files").fetchall()
+        return {row["path"]: row["id"] for row in rows}
+
+    def get_id(self, path: str) -> int | None:
+        row = self._conn.execute("SELECT id FROM files WHERE path = ?", (path,)).fetchone()
+        return row["id"] if row else None
+
     def count_by_kind(self) -> dict[str, int]:
         rows = self._conn.execute(
             "SELECT kind, COUNT(*) AS n FROM files GROUP BY kind"
         ).fetchall()
         return {row["kind"]: row["n"] for row in rows}
+
+    def list_projects(self) -> list[dict[str, object]]:
+        """Return one row per project, with its summary's metadata.
+
+        ``date_modified`` is taken from the summary file — the canonical
+        "when did this project last move" timestamp.
+        """
+        rows = self._conn.execute(
+            """
+            SELECT project, title, aliases, date_created, date_modified, path
+            FROM files
+            WHERE kind = 'project_summary'
+            ORDER BY project
+            """
+        ).fetchall()
+        return [
+            {
+                "project": row["project"],
+                "title": row["title"],
+                "aliases": json.loads(row["aliases"] or "[]"),
+                "date_created": row["date_created"],
+                "date_modified": row["date_modified"],
+                "summary_path": row["path"],
+            }
+            for row in rows
+        ]
+
+    # ---- Refs (wikilinks + project loads) -----------------------------
+
+    def record_ref(
+        self,
+        *,
+        target_id: int,
+        ref_type: str,
+        source_id: int | None = None,
+        occurred_at: str | None = None,
+    ) -> None:
+        """Insert one row into ``refs``.
+
+        ``ref_type`` is ``'wikilink'`` (source file cites the target) or
+        ``'project_load'`` (an MCP/CLI call loaded the target — no source).
+        """
+        if ref_type not in {"wikilink", "project_load"}:
+            raise ValueError(f"Unknown ref_type {ref_type!r}.")
+        with self._conn:
+            self._conn.execute(
+                "INSERT INTO refs(source_id, target_id, ref_type, occurred_at) "
+                "VALUES (?, ?, ?, ?)",
+                (source_id, target_id, ref_type, occurred_at or now_iso()),
+            )
+
+    def clear_wikilink_refs_from(self, source_id: int) -> int:
+        """Drop all wikilink rows originating at ``source_id``. Returns count."""
+        with self._conn:
+            cur = self._conn.execute(
+                "DELETE FROM refs WHERE source_id = ? AND ref_type = 'wikilink'",
+                (source_id,),
+            )
+            return cur.rowcount
+
+    def reference_count(self, target_id: int, *, since_days: int = 60) -> int:
+        """Count refs to ``target_id`` within the last ``since_days``."""
+        row = self._conn.execute(
+            "SELECT COUNT(*) AS n FROM refs "
+            "WHERE target_id = ? AND occurred_at > date('now', ?)",
+            (target_id, f"-{since_days} days"),
+        ).fetchone()
+        return int(row["n"]) if row else 0
+
+    def refs_to(self, target_id: int) -> list[dict[str, object]]:
+        """All refs targeting ``target_id``, newest first. Used by tests."""
+        rows = self._conn.execute(
+            "SELECT source_id, ref_type, occurred_at FROM refs "
+            "WHERE target_id = ? ORDER BY occurred_at DESC",
+            (target_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
 
     # ---- Search --------------------------------------------------------
 

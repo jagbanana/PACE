@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from pace import frontmatter
+from pace import frontmatter, wikilinks
 from pace.index import Index, now_iso
 from pace.io import atomic_write_text
 from pace.paths import (
@@ -139,14 +139,24 @@ def init(root: Path) -> InitResult:
 
 
 def reindex(root: Path, index: Index) -> ReindexResult:
-    """Rebuild the index from disk. Files no longer on disk are removed."""
+    """Rebuild the file index and wikilink refs from disk.
+
+    Files no longer present are removed. After every file is upserted we
+    refresh outbound wikilink refs so reference counts (used by pruning)
+    stay aligned with reality even when the user edited markdown directly
+    in Obsidian.
+    """
     root = root.resolve()
     seen: set[str] = set()
     indexed = 0
     skipped = 0
 
+    # First pass: file rows. Wikilink resolution needs the full path→id map,
+    # so we record bodies for the second pass instead of re-reading.
+    bodies: dict[int, str] = {}
+
     for md in _walk_markdown(root):
-        rel = str(md.relative_to(root)).replace("\\", "/")
+        rel = md.relative_to(root).as_posix()
         kind = _kind_from_path(rel)
         if kind is None:
             skipped += 1
@@ -162,7 +172,7 @@ def reindex(root: Path, index: Index) -> ReindexResult:
         aliases = list(fm.get("aliases") or [])
         project = _project_from_path(rel)
 
-        index.upsert_file(
+        fid = index.upsert_file(
             path=rel,
             kind=kind,
             project=project,
@@ -173,8 +183,24 @@ def reindex(root: Path, index: Index) -> ReindexResult:
             date_created=date_created,
             date_modified=date_modified,
         )
+        bodies[fid] = body
         seen.add(rel)
         indexed += 1
+
+    # Second pass: wikilink refs. Now every file is in the index, so target
+    # resolution can find every plausible link.
+    paths_to_ids = index.all_paths_with_ids()
+    for fid, body in bodies.items():
+        index.clear_wikilink_refs_from(fid)
+        for link in wikilinks.extract(body):
+            target_id = wikilinks.resolve(link.target, paths_to_ids)
+            if target_id is None or target_id == fid:
+                continue
+            index.record_ref(
+                source_id=fid,
+                target_id=target_id,
+                ref_type="wikilink",
+            )
 
     # Remove rows whose files were deleted on disk.
     removed = 0
