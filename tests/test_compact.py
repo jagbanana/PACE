@@ -305,3 +305,83 @@ def test_apply_force_promotion_keeps_newest_entries(vault: Path, index: Index) -
     assert "Entry 0" in wm_text
     # The oldest (i=3, 13 days ago) should have been pushed to overflow.
     assert "Entry 3" not in wm_text
+
+
+def test_force_promotion_skips_exempt_entries(vault: Path, index: Index) -> None:
+    """Entries tagged ``#user``, ``#high-signal``, or ``#decision`` must
+    NOT be force-promoted, even when they're the oldest. Losing the
+    pinned identity entry to overflow would break the address+sign
+    personality rule on the very next session."""
+    _write_tight_settings(vault, soft=300, hard=2_000)
+    now = datetime(2026, 4, 27, 10, 0, 0)
+
+    # Oldest entry is the identity pin. Should survive force-promotion.
+    _write_working_entry(
+        vault,
+        when=now - timedelta(days=30),
+        tags=["#user", "#high-signal"],
+        content="Identity bookends: User Justin. Sign as Pacey emoji.",
+    )
+
+    # Newer non-exempt entries that should get force-promoted instead.
+    for i in range(5):
+        _write_working_entry(
+            vault,
+            when=now - timedelta(days=10 + i),
+            tags=["#fact"],
+            content=f"Filler {i}: padding text padding text padding text.",
+        )
+
+    plan = compact_ops.plan_compaction(vault, index, now=now)
+    for cand in plan["candidates"]:
+        cand["decision"] = "skip"
+    result = compact_ops.apply_compaction(vault, index, plan)
+
+    assert result.overflow_promoted >= 1, (
+        "expected non-exempt fillers to overflow to make room"
+    )
+
+    wm_text = (vault / WORKING_MEMORY).read_text(encoding="utf-8")
+    assert "Identity bookends" in wm_text, (
+        "exempt identity entry must survive force-promotion — "
+        "personality bookends rely on this"
+    )
+
+    # The overflow file should not contain the exempt content.
+    overflow = vault / LONG_TERM_DIR / "working-overflow.md"
+    if overflow.is_file():
+        overflow_text = overflow.read_text(encoding="utf-8")
+        assert "Identity bookends" not in overflow_text
+
+
+def test_force_promotion_halts_when_only_exempt_entries_remain(
+    vault: Path, index: Index
+) -> None:
+    """If after force-promoting every non-exempt entry the body is
+    still over the soft cap (e.g. the user has many tagged decisions),
+    force-promotion must stop rather than touch exempt content. doctor
+    surfaces the situation later as a warning."""
+    _write_tight_settings(vault, soft=200, hard=10_000)
+    now = datetime(2026, 4, 27, 10, 0, 0)
+
+    # All entries are exempt; total > soft cap.
+    for i in range(4):
+        _write_working_entry(
+            vault,
+            when=now - timedelta(days=10 + i),
+            tags=["#decision"],
+            content=f"Decision {i}: chose option A over B for reason X.",
+        )
+
+    plan = compact_ops.plan_compaction(vault, index, now=now)
+    for cand in plan["candidates"]:
+        cand["decision"] = "skip"
+    result = compact_ops.apply_compaction(vault, index, plan)
+
+    # Nothing was force-promoted because everything is exempt.
+    assert result.overflow_promoted == 0
+
+    # All four decisions should still be in working memory.
+    wm_text = (vault / WORKING_MEMORY).read_text(encoding="utf-8")
+    for i in range(4):
+        assert f"Decision {i}" in wm_text

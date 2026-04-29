@@ -145,6 +145,26 @@ def test_skill_warns_off_maintenance_tools() -> None:
         assert forbidden in text, f"SKILL.md should explicitly forbid {forbidden}"
 
 
+def test_skill_carries_address_and_sign_rule() -> None:
+    """The plugin SKILL must teach the same personality rule the in-vault
+    CLAUDE.md does. Cowork users only see SKILL.md until pace_init runs."""
+    text = _skill_text()
+    assert "Address the user and sign every reply" in text
+    assert "Sign at the bottom" in text
+    assert "Vary the opener" in text or "vary the" in text.lower()
+
+
+def test_onboarding_reference_asks_for_emoji_and_pins_identity() -> None:
+    """Beat 1 of onboarding must collect the emoji and write the
+    identity-pin capture so personality bookends survive force-promotion."""
+    ref = (PLUGIN_ROOT / "skills" / "pace-memory" / "references" / "onboarding.md").read_text(
+        encoding="utf-8"
+    )
+    assert "emoji" in ref.lower()
+    assert "Identity bookends" in ref
+    assert '"#user", "#high-signal"' in ref
+
+
 def test_onboarding_reference_doc_exists() -> None:
     """The full first-run flow lives in references/onboarding.md so it
     only loads when needed."""

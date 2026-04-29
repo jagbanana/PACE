@@ -42,6 +42,20 @@ from pace.paths import LONG_TERM_DIR, WORKING_MEMORY
 # compaction and revisit them during the next run.
 _OVERFLOW_TOPIC = "working-overflow"
 
+# Tags that exempt an entry from *force* promotion (the "we're over the
+# soft cap and need to make room" path). These are the same retention
+# exemptions used by weekly review (PRD §6.10) plus ``#user`` for the
+# pinned identity entry that holds the user's name and the assistant's
+# nickname/emoji. Without this guard the personality bookends would
+# eventually get pushed to overflow as the oldest entries in the buffer.
+_FORCE_PROMOTION_EXEMPT_TAGS: frozenset[str] = frozenset(
+    {"#user", "#high-signal", "#decision"}
+)
+
+
+def _is_force_promotion_exempt(entry: Entry) -> bool:
+    return any(tag in _FORCE_PROMOTION_EXEMPT_TAGS for tag in entry.tags)
+
 # Tag-driven topic suggestions. When the LLM doesn't override, these are
 # safe defaults that group related facts in the same long_term file.
 _TAG_TO_TOPIC: dict[str, str] = {
@@ -291,7 +305,25 @@ def apply_compaction(
         overflow_target_path = root / overflow_target_rel
 
         while entries and len(join(entries)) > settings.working_memory_soft_chars:
-            oldest = entries.pop(0)
+            # Force-promote the oldest *non-exempt* entry. Identity
+            # bookends and decision records are exempt — losing those
+            # to overflow would cost what PACE was built to preserve
+            # (PRD §6.10 retention exemptions).
+            promotable_idx = next(
+                (i for i, e in enumerate(entries) if not _is_force_promotion_exempt(e)),
+                None,
+            )
+            if promotable_idx is None:
+                # Everything left is exempt. Stop force-promoting; the
+                # working_memory.md file may still exceed the soft cap,
+                # but pace doctor will flag it and `pace_status`
+                # truncation handles the hard cap regardless.
+                log_lines.append(
+                    "- overflow halted: only exempt entries remain "
+                    "(#user / #high-signal / #decision)."
+                )
+                break
+            oldest = entries.pop(promotable_idx)
             _append_to_long_term(
                 overflow_target_path, oldest, topic=_OVERFLOW_TOPIC
             )

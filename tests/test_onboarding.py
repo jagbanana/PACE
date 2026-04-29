@@ -73,6 +73,38 @@ def test_claude_md_template_includes_three_beat_onboarding() -> None:
         assert beat in CLAUDE_MD_TEMPLATE
 
 
+def test_claude_md_template_carries_address_and_sign_rule() -> None:
+    """Personality bookends are part of the always-loaded CLAUDE.md, so
+    every reply in a PACE vault gets the user's name at the top and the
+    assistant nickname/emoji at the bottom."""
+    # Section heading is the structural anchor.
+    assert "Address the user and sign every reply" in CLAUDE_MD_TEMPLATE
+    # Both halves of the rule must be there.
+    assert "Vary the opener" in CLAUDE_MD_TEMPLATE or "vary the" in CLAUDE_MD_TEMPLATE.lower()
+    assert "Sign at the bottom" in CLAUDE_MD_TEMPLATE
+    # The opt-out path must also be documented or the model will drop
+    # the rule entirely when nickname is missing.
+    assert "skip the sign-off" in CLAUDE_MD_TEMPLATE
+
+
+def test_claude_md_template_onboarding_asks_for_emoji() -> None:
+    """The onboarding script must explicitly ask for an emoji so the
+    sign-off has something to render."""
+    assert "emoji" in CLAUDE_MD_TEMPLATE.lower()
+    # And tell the model to pick one if the user defers.
+    assert "you pick" in CLAUDE_MD_TEMPLATE.lower() or "pick an emoji" in CLAUDE_MD_TEMPLATE.lower()
+
+
+def test_claude_md_template_includes_identity_pin_capture() -> None:
+    """The 4th capture is the working-memory identity pin that survives
+    force-promotion. Without it, personality info isn't returned by
+    pace_status on subsequent sessions."""
+    assert "Identity bookends" in CLAUDE_MD_TEMPLATE
+    # Tag set on the pin must include #user and #high-signal so the
+    # force-promotion exemption applies.
+    assert '"#user", "#high-signal"' in CLAUDE_MD_TEMPLATE
+
+
 # ---- Scheduled-task prompts -------------------------------------------
 
 
