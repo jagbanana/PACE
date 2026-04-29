@@ -405,6 +405,25 @@ class Index:
             for row in rows
         ]
 
+    # ---- Health --------------------------------------------------------
+
+    def integrity_check(self) -> list[str]:
+        """Run ``PRAGMA integrity_check`` and return a list of issues.
+
+        Returns ``[]`` when the database is clean. Each row of output is
+        either ``"ok"`` (no issues) or a free-form description of a
+        problem; we filter the ``"ok"`` row out so the caller can treat
+        a non-empty list as failure.
+        """
+        rows = self._conn.execute("PRAGMA integrity_check").fetchall()
+        issues: list[str] = []
+        for row in rows:
+            # SQLite returns a single column; tuple-style access is portable.
+            value = row[0] if not hasattr(row, "keys") else row[list(row.keys())[0]]
+            if value != "ok":
+                issues.append(value)
+        return issues
+
     # ---- Config --------------------------------------------------------
 
     def get_config(self, key: str) -> str | None:

@@ -34,6 +34,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from pace import doctor as doctor_ops
 from pace import projects as project_ops
 from pace import vault as vault_ops
 from pace.capture import capture as capture_entry
@@ -81,17 +82,6 @@ def _not_initialized_response() -> dict[str, Any]:
     }
 
 
-def _scan_conflicted_copies(root: Path) -> list[str]:
-    """Return relative paths of OneDrive ``* (Conflicted Copy *).md`` files.
-
-    Surfaced through ``pace_status`` so the model raises them with the
-    user before doing anything else (PRD §7.2).
-    """
-    out: list[str] = []
-    for md in root.rglob("*.md"):
-        if "Conflicted Copy" in md.name and md.is_file():
-            out.append(md.relative_to(root).as_posix())
-    return sorted(out)
 
 
 # ---- Tools ------------------------------------------------------------
@@ -130,14 +120,6 @@ def pace_status() -> dict[str, Any]:
             "warnings": [],
         }
 
-    warnings = []
-    conflicts = _scan_conflicted_copies(root)
-    if conflicts:
-        warnings.append(
-            "OneDrive conflicted copies present — raise these to the user "
-            "before proceeding: " + ", ".join(conflicts)
-        )
-
     wm_body = ""
     wm_path = root / WORKING_MEMORY
     if wm_path.is_file():
@@ -149,6 +131,9 @@ def pace_status() -> dict[str, Any]:
         counts = idx.count_by_kind()
         last_compact = idx.get_config("last_compact")
         last_review = idx.get_config("last_review")
+        # Source warnings from doctor so MCP and CLI never disagree about
+        # which issues need surfacing.
+        report = doctor_ops.run_all(root, idx)
     finally:
         idx.close()
 
@@ -159,7 +144,7 @@ def pace_status() -> dict[str, Any]:
         "last_compact": last_compact,
         "last_review": last_review,
         "working_memory": wm_body,
-        "warnings": warnings,
+        "warnings": doctor_ops.report_to_warnings(report),
     }
 
 

@@ -137,9 +137,15 @@ def init(root: Path) -> InitResult:
     # SQLite index ------------------------------------------------------
     db_path = root / INDEX_DB
     db_existed = db_path.is_file()
-    Index(db_path).close()  # creates + applies schema
-    if not db_existed:
-        created_files.append(INDEX_DB)
+    idx = Index(db_path)
+    try:
+        if not db_existed:
+            # Stamp vault creation time so doctor can suppress
+            # "scheduled tasks never ran" warnings on day-1 vaults.
+            idx.set_config("vault_created_at", now_iso())
+            created_files.append(INDEX_DB)
+    finally:
+        idx.close()
 
     # Vault .gitignore --------------------------------------------------
     gitignore = root / ".gitignore"

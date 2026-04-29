@@ -25,17 +25,21 @@ if sys.platform == "win32":
             stream.reconfigure(encoding="utf-8", errors="replace")
 
 import json
+import shutil
 from datetime import datetime
 
 from pace import __version__
 from pace import compact as compact_ops
+from pace import doctor as doctor_ops
+from pace import frontmatter as fm_parser
 from pace import projects as project_ops
 from pace import review as review_ops
 from pace import vault as vault_ops
 from pace.capture import capture as capture_entry
-from pace.index import Index
+from pace.index import Index, now_iso
 from pace.lockfile import PaceLockBusy, acquire_pace_lock
 from pace.paths import (
+    ARCHIVED_DIR,
     INDEX_DB,
     VaultNotFoundError,
     find_vault_root,
@@ -91,7 +95,7 @@ def init(root: Path | None) -> None:
 
 @main.command()
 def status() -> None:
-    """Report initialization state, file counts, and last-task timestamps."""
+    """Report initialization state, counts, last-task timestamps, and health."""
     root = find_vault_root()
     if root is None:
         click.echo("PACE: no initialized vault found from this directory.")
@@ -112,6 +116,15 @@ def status() -> None:
         last_review = idx.get_config("last_review") or "never"
         click.echo(f"Last compaction: {last_compact}")
         click.echo(f"Last review:     {last_review}")
+
+        report = doctor_ops.run_all(root, idx)
+        if report.healthy:
+            click.echo("Health: clean.")
+        else:
+            click.echo(f"Health: {len(report.errors)} error(s), {len(report.warnings)} warning(s).")
+            for issue in report.errors + report.warnings:
+                click.echo(f"  [{issue.severity}] {issue.code}: {issue.message}")
+            click.echo("Run `pace doctor` for detail and fix hints.")
 
 
 # ---- capture -----------------------------------------------------------
@@ -324,6 +337,98 @@ def review(plan_mode: bool, apply_path: Path | None, out_path: Path | None) -> N
                     click.echo(f"  log: {result.log_path.relative_to(root)}")
     except PaceLockBusy as exc:
         raise click.ClickException(str(exc)) from exc
+
+
+# ---- doctor ------------------------------------------------------------
+
+
+@main.command()
+@click.option("--json", "as_json", is_flag=True, help="Emit the report as JSON.")
+def doctor(as_json: bool) -> None:
+    """Run vault health checks (PRD §6.7). Never auto-fixes — surfaces only."""
+    root = require_vault_root()
+    with _open_index(root) as idx:
+        report = doctor_ops.run_all(root, idx)
+
+    if as_json:
+        payload = {
+            "root": str(report.root),
+            "healthy": report.healthy,
+            "issues": [doctor_ops.issue_to_dict(i) for i in report.issues],
+        }
+        click.echo(json.dumps(payload, indent=2))
+        if not report.healthy:
+            raise SystemExit(1)
+        return
+
+    click.echo(f"Vault: {report.root}")
+    if report.healthy:
+        click.echo("All checks pass.")
+        return
+
+    click.echo(f"{len(report.errors)} error(s), {len(report.warnings)} warning(s).")
+    for issue in report.errors + report.warnings:
+        click.echo("")
+        click.echo(f"[{issue.severity}] {issue.code}: {issue.message}")
+        if issue.detail:
+            click.echo(f"  detail: {issue.detail}")
+        if issue.fix_hint:
+            click.echo(f"  fix:    {issue.fix_hint}")
+    raise SystemExit(1 if report.errors else 0)
+
+
+# ---- archive -----------------------------------------------------------
+
+
+@main.command()
+@click.argument("path", type=click.Path(path_type=Path))
+def archive(path: Path) -> None:
+    """Manually archive a markdown file: move to memories/archived/ and re-index."""
+    root = require_vault_root()
+    src = (path if path.is_absolute() else root / path).resolve()
+
+    if not src.is_file():
+        raise click.ClickException(f"File not found: {path}")
+    if src.suffix != ".md":
+        raise click.ClickException("Only markdown files can be archived.")
+    try:
+        rel_src = src.relative_to(root).as_posix()
+    except ValueError as exc:
+        raise click.ClickException(
+            f"{src} is outside the vault root {root}; refusing to archive."
+        ) from exc
+
+    archived_root = root / ARCHIVED_DIR
+    archived_root.mkdir(parents=True, exist_ok=True)
+    dest = archived_root / src.name
+    if dest.exists():
+        raise click.ClickException(
+            f"Archive target {dest.relative_to(root).as_posix()} already exists; "
+            "rename or remove it first."
+        )
+
+    # Move on disk, update the index in one shot. Atomic in spirit: if
+    # the rename fails, we never touched the index. If the index update
+    # fails after rename, `pace reindex` will recover.
+    shutil.move(str(src), str(dest))
+
+    text = dest.read_text(encoding="utf-8")
+    fm, body = fm_parser.parse(text)
+    rel_dest = dest.relative_to(root).as_posix()
+
+    with _open_index(root) as idx:
+        idx.delete_file(rel_src)
+        idx.upsert_file(
+            path=rel_dest,
+            kind="archived",
+            title=str(fm.get("title") or dest.stem),
+            body=body,
+            date_created=str(fm.get("date_created", now_iso())),
+            date_modified=str(fm.get("date_modified", now_iso())),
+            tags=list(fm.get("tags") or []),
+        )
+
+    click.echo(f"Archived: {rel_src} → {rel_dest}")
 
 
 # ---- reindex -----------------------------------------------------------
