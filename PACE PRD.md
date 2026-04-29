@@ -333,12 +333,14 @@ CREATE TABLE files (
   kind TEXT NOT NULL,           -- working | long_term | project_summary | project_note | archived
   project TEXT,                  -- nullable; project name when applicable
   title TEXT NOT NULL,
+  body TEXT NOT NULL,            -- markdown body without frontmatter; canonical for FTS
   aliases TEXT,                  -- JSON array; populated for kind='project_summary'
   date_created TEXT NOT NULL,    -- ISO-8601
   date_modified TEXT NOT NULL,   -- ISO-8601
   tags TEXT                      -- JSON array, also indexed in FTS
 );
 
+-- External-content FTS5: index references files.<col> by rowid.
 CREATE VIRTUAL TABLE files_fts USING fts5(
   title, body, tags, aliases,
   content='files', content_rowid='id',
