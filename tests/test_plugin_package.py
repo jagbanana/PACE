@@ -90,13 +90,20 @@ def test_mcp_json_present_at_plugin_root() -> None:
     assert (PLUGIN_ROOT / ".mcp.json").is_file()
 
 
-def test_mcp_json_uses_uvx() -> None:
-    """The plugin spawns the MCP server via uvx so users don't need to
-    manage Python themselves. Changing this is a deliberate decision."""
+def test_mcp_json_uses_uvx_against_bundled_source() -> None:
+    """The plugin spawns the MCP server via ``uvx --from`` pointed at
+    the bundled source under ``${CLAUDE_PLUGIN_ROOT}/server``. This is
+    the bundled-source-no-PyPI-publish path — changing it (e.g. back to
+    a PyPI package name) is a deliberate decision that needs to be
+    matched by the build script and the README."""
     payload = json.loads((PLUGIN_ROOT / ".mcp.json").read_text(encoding="utf-8"))
     server = payload["mcpServers"]["pace"]
     assert server["command"] == "uvx"
-    assert server["args"] == ["--from", "pace-memory", "pace-mcp"]
+    assert server["args"] == [
+        "--from",
+        "${CLAUDE_PLUGIN_ROOT}/server",
+        "pace-mcp",
+    ]
 
 
 # ---- SKILL.md --------------------------------------------------------

@@ -2,7 +2,7 @@
   "mcpServers": {
     "pace": {
       "command": "uvx",
-      "args": ["--from", "pace-memory", "pace-mcp"],
+      "args": ["--from", "${CLAUDE_PLUGIN_ROOT}/server", "pace-mcp"],
       "env": {}
     }
   }

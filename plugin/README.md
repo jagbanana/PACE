@@ -14,10 +14,14 @@ yourself — open the folder you want to use as your vault and talk.
 ## Prerequisites
 
 - **Cowork** installed and running.
-- **`uv`** on your `PATH`. Install from <https://docs.astral.sh/uv/>
-  (one-line installer for Windows / macOS / Linux). The plugin uses
-  `uvx` to launch the PACE Python server in an isolated environment,
-  so you don't need to manage Python or virtualenvs yourself.
+- **`uv`** on your `PATH`. Install from <https://docs.astral.sh/uv/>:
+  - **Windows (PowerShell):** `irm https://astral.sh/uv/install.ps1 | iex`
+  - **macOS / Linux:** `curl -LsSf https://astral.sh/uv/install.sh | sh`
+
+  The plugin uses `uvx` to run the bundled PACE Python source in an
+  isolated environment, so you don't manage Python or virtualenvs
+  yourself. After installing `uv`, **restart Cowork** so the new
+  `PATH` propagates.
 - **Python 3.11+** is fetched automatically by `uv` if it isn't
   already installed.
 
@@ -41,8 +45,15 @@ uv --version
 
      **Leave blank to let onboarding pick a path on first use.** You
      can change this later from Cowork's plugin settings.
-4. Enable the plugin. Cowork starts the bundled MCP server in the
-   background.
+4. Enable the plugin. Cowork spawns the bundled MCP server via
+   `uvx`. The first launch takes a few seconds while `uv` resolves
+   the server's dependencies (`click`, `mcp`, `pyyaml`,
+   `portalocker`, `python-dateutil`); subsequent launches are
+   instant — the resolved environment is cached.
+
+The plugin **bundles its own Python source** (under `server/` inside
+the zip), so it doesn't need to download anything from PyPI to start.
+The dependencies above are the only things `uv` fetches at first run.
 
 ## First use
 
@@ -121,9 +132,12 @@ If those don't appear:
   shell — restart Cowork after installing `uv`).
 - Open Cowork's plugin diagnostics (or the relevant log location for
   your OS) and look for errors from the `pace` MCP server.
-- Try running `uvx --from pace-memory pace-mcp --help` in a terminal
-  — it should print the PACE CLI help. If that fails, `pace-memory`
-  isn't reachable on PyPI from your network.
+- Run `uv --version` and `uvx --help` in a terminal to confirm `uv`
+  itself is working.
+- The first launch downloads the server's dependencies; if your
+  network is restricted, you may need to allow `uv` access to
+  `https://pypi.org` for that one-time fetch. Subsequent launches
+  use the cache and need no network.
 
 ## Daily / weekly maintenance
 

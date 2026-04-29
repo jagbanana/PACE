@@ -1,27 +1,46 @@
-"""Build ``pace-memory.plugin`` (a zip) from ``plugin/``.
+"""Build ``pace-memory.plugin`` (a zip) from ``plugin/`` + bundled source.
 
 Usage:
 
     python scripts/build_plugin.py [--out dist/pace-memory.plugin]
 
-Cross-platform replacement for ``zip -r`` so Windows users without the
-zip CLI can produce releases. Excludes OS / editor cruft and zero-byte
-``__pycache__`` directories. Sanity-checks that the manifest's
-``version`` matches ``pace.__version__`` so a forgotten bump in one
-file fails loudly.
+Two-stage build:
+
+1. **Stage** — copies the Python source needed at runtime (``src/pace/``,
+   ``pyproject.toml``, ``LICENSE``, plus a minimal ``README.md``) into a
+   temporary staging directory **outside the source tree**. Avoiding the
+   source tree (and therefore OneDrive) keeps this fast and reliable —
+   OneDrive on Windows holds open handles for several seconds after a
+   write, which makes in-tree staging racy.
+2. **Zip** — writes ``plugin/`` (verbatim) plus the staged source (under
+   the ``server/`` arc-name prefix) into the ``.plugin`` archive.
+
+The plugin's ``.mcp.json`` runs ``uvx --from ${CLAUDE_PLUGIN_ROOT}/server
+pace-mcp``; the ``server/`` arc-name prefix is what makes that resolve.
+
+Excludes OS / editor cruft and ``__pycache__`` everywhere. Sanity-checks
+that the manifest's ``version`` matches ``pace.__version__`` so a
+forgotten bump in one file fails loudly.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PLUGIN_DIR = REPO_ROOT / "plugin"
 DEFAULT_OUT = REPO_ROOT / "dist" / "pace-memory.plugin"
+
+# Arc-name prefix for the bundled Python source inside the zip. Must
+# match the path the plugin's ``.mcp.json`` references via
+# ``${CLAUDE_PLUGIN_ROOT}/server``.
+SERVER_ARCNAME_PREFIX = "server"
 
 # Patterns of files/dirs we never want in a plugin zip.
 EXCLUDED_NAMES: frozenset[str] = frozenset({
@@ -32,6 +51,20 @@ EXCLUDED_NAMES: frozenset[str] = frozenset({
     ".pytest_cache",
     ".ruff_cache",
 })
+
+# Minimal README written into the staged server dir. The bundled source
+# only needs enough metadata for ``uvx`` to resolve it; we don't want
+# to ship the full repo README inside the plugin.
+_BUNDLED_README = """\
+# pace-memory — bundled source
+
+This is the Python source for the PACE MCP server, shipped inside the
+`pace-memory` Cowork plugin. At runtime it's resolved by
+`uvx --from ${CLAUDE_PLUGIN_ROOT}/server pace-mcp` — users don't run
+this directly.
+
+Full project: <https://github.com/justingesso/pace>.
+"""
 
 
 def _check_version_alignment() -> None:
@@ -69,7 +102,7 @@ def _iter_plugin_files() -> list[Path]:
 
 
 def build(out_path: Path) -> Path:
-    """Zip ``plugin/`` into ``out_path``. Returns the resolved output path."""
+    """Stage source into a temp dir, then zip ``plugin/`` + staged source to ``out_path``."""
     if not PLUGIN_DIR.is_dir():
         raise SystemExit(f"plugin/ directory not found at {PLUGIN_DIR}")
 
@@ -80,16 +113,70 @@ def build(out_path: Path) -> Path:
     if out_path.exists():
         out_path.unlink()
 
-    files = _iter_plugin_files()
-    if not files:
+    plugin_files = _iter_plugin_files()
+    if not plugin_files:
         raise SystemExit("plugin/ is empty — nothing to package.")
 
-    with zipfile.ZipFile(out_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        for path in files:
-            arcname = path.relative_to(PLUGIN_DIR).as_posix()
-            zf.write(path, arcname)
+    # Stage the bundled source into a system temp dir so we never write
+    # under OneDrive — that's what made earlier in-tree staging flaky.
+    # The TemporaryDirectory cleans up automatically on exit.
+    with tempfile.TemporaryDirectory(prefix="pace-plugin-stage-") as tmp:
+        staged = stage_server_source(Path(tmp))
+
+        with zipfile.ZipFile(out_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            # plugin/ verbatim.
+            for path in plugin_files:
+                arcname = path.relative_to(PLUGIN_DIR).as_posix()
+                zf.write(path, arcname)
+            # Staged source under the server/ prefix.
+            for path in sorted(staged.rglob("*")):
+                if not path.is_file():
+                    continue
+                rel = path.relative_to(staged).as_posix()
+                arcname = f"{SERVER_ARCNAME_PREFIX}/{rel}"
+                zf.write(path, arcname)
 
     return out_path
+
+
+def stage_server_source(target_dir: Path) -> Path:
+    """Copy the Python source uvx needs into ``target_dir``.
+
+    Pure copy operation — no destructive cleanup, no in-tree mutation.
+    The caller owns ``target_dir`` and its lifecycle (typically a
+    ``tempfile.TemporaryDirectory``).
+
+    Bundles:
+    - ``src/pace/`` (excluding ``__pycache__``)
+    - ``pyproject.toml`` (so uvx can resolve the package metadata and
+      run the ``pace-mcp`` entry point)
+    - ``LICENSE`` (referenced by pyproject)
+    - A minimal ``README.md`` (also referenced by pyproject)
+    """
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    # src/pace/ — include only Python sources; skip caches.
+    src_pace = REPO_ROOT / "src" / "pace"
+    dest_pace = target_dir / "src" / "pace"
+    if dest_pace.exists():
+        shutil.rmtree(dest_pace)
+    shutil.copytree(
+        src_pace,
+        dest_pace,
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo"),
+    )
+
+    # pyproject.toml — uvx reads this to know dependencies + entry points.
+    shutil.copy2(REPO_ROOT / "pyproject.toml", target_dir / "pyproject.toml")
+
+    # LICENSE — pyproject's license field references the same MIT terms.
+    shutil.copy2(REPO_ROOT / "LICENSE", target_dir / "LICENSE")
+
+    # Minimal README — pyproject declares ``readme = "README.md"`` so the
+    # build backend wants this present, but users never see it.
+    (target_dir / "README.md").write_text(_BUNDLED_README, encoding="utf-8")
+
+    return target_dir
 
 
 def main() -> int:

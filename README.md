@@ -16,7 +16,9 @@ There are two installation paths depending on which client you're using:
 
 This is the supported path for almost everyone. Cowork doesn't load project-scoped `.mcp.json` files, so the only way to wire MCP into Cowork is via a plugin.
 
-1. Install [`uv`](https://docs.astral.sh/uv/) — the plugin uses `uvx` to launch the PACE Python server in an isolated environment so you don't need to manage Python yourself. Restart Cowork after installing `uv` so the new `PATH` propagates.
+The plugin **bundles the PACE Python source inside its zip**. Nothing is fetched from PyPI to make the plugin work — `uvx` just runs the bundled source. The only thing fetched at install time is the small set of runtime dependencies (`click`, `mcp`, `pyyaml`, `portalocker`, `python-dateutil`), and `uv` caches them.
+
+1. Install [`uv`](https://docs.astral.sh/uv/) — the plugin uses `uvx` to launch the bundled PACE source in an isolated environment, so you don't manage Python yourself. Restart Cowork after installing `uv` so the new `PATH` propagates.
 2. Download `pace-memory.plugin` from the [releases page](https://github.com/justingesso/pace/releases) (or build it from source — see [Building the plugin](#building-the-plugin) below).
 3. In Cowork, open the **Plugins** UI and install `pace-memory.plugin` (drag onto the window or use *Install from file*).
 4. Cowork prompts for plugin config. The only field is `vaultRoot` — leave it blank and onboarding will pick a path on first use, or fill in an absolute path now.
@@ -61,7 +63,12 @@ python scripts/build_plugin.py
 # → dist/pace-memory.plugin
 ```
 
-The build script bundles `plugin/` into a `.plugin` zip and sanity-checks that `plugin/.claude-plugin/plugin.json`'s `version` matches `pace.__version__` so a forgotten bump fails loudly.
+The build script:
+1. **Stages** the runtime Python source into `plugin/server/` — `src/pace/`, `pyproject.toml`, `LICENSE`, plus a minimal in-zip `README.md`. `plugin/server/` is gitignored; it's a build artifact, regenerated on every build.
+2. **Sanity-checks** that `plugin/.claude-plugin/plugin.json`'s `version` matches `pace.__version__` so a forgotten bump fails loudly.
+3. **Zips** `plugin/` (now including `server/`) into `dist/pace-memory.plugin`.
+
+At runtime, the plugin's `.mcp.json` runs `uvx --from ${CLAUDE_PLUGIN_ROOT}/server pace-mcp`, which resolves the bundled source and runs the MCP server. No PyPI publish required.
 
 ## Vault location resolution
 

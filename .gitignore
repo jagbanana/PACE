@@ -15,6 +15,12 @@ pace_config.yaml
 # root only so plugin/.mcp.json (committed plugin source) isn't ignored.
 /.mcp.json
 
+# plugin/server/ — defensive ignore. The build script stages bundled
+# source under a system temp dir (not in the source tree) and zips
+# from there, so this path shouldn't normally exist. Kept ignored in
+# case a stale build artifact lands here.
+plugin/server/
+
 # --- Python ---
 __pycache__/
 *.py[cod]
