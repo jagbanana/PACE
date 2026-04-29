@@ -2,7 +2,8 @@
 
 Phase 1 surface: ``init``, ``status``, ``capture``, ``search``, ``reindex``.
 Phase 2 adds the ``project`` command group and project-aware ``capture``.
-MCP, compaction, and review commands arrive in subsequent phases.
+Phase 5 adds ``compact`` and ``review`` (each with ``--plan`` / ``--apply``)
+plus a process-wide lock at ``system/.pace.lock`` so they can't overlap.
 """
 
 from __future__ import annotations
@@ -23,11 +24,17 @@ if sys.platform == "win32":
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8", errors="replace")
 
+import json
+from datetime import datetime
+
 from pace import __version__
+from pace import compact as compact_ops
 from pace import projects as project_ops
+from pace import review as review_ops
 from pace import vault as vault_ops
 from pace.capture import capture as capture_entry
 from pace.index import Index
+from pace.lockfile import PaceLockBusy, acquire_pace_lock
 from pace.paths import (
     INDEX_DB,
     VaultNotFoundError,
@@ -217,6 +224,108 @@ def search(scope: str | None, project: str | None, limit: int, query: str) -> No
         click.echo("")
 
 
+# ---- compact -----------------------------------------------------------
+
+
+@main.command()
+@click.option("--plan", "plan_mode", is_flag=True, help="Generate a compaction plan as JSON.")
+@click.option(
+    "--apply",
+    "apply_path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Apply the approvals in the given plan file.",
+)
+@click.option(
+    "--out",
+    "out_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="(--plan only) Write plan JSON to this path. Default: system/logs/.",
+)
+def compact(plan_mode: bool, apply_path: Path | None, out_path: Path | None) -> None:
+    """Run daily compaction (PRD §6.3). Use --plan to generate, --apply to execute."""
+    _check_plan_apply_args(plan_mode, apply_path)
+    root = require_vault_root()
+
+    try:
+        with acquire_pace_lock(root), _open_index(root) as idx:
+            if plan_mode:
+                plan = compact_ops.plan_compaction(root, idx)
+                target = _resolve_plan_out_path(root, out_path, kind="compact")
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
+                click.echo(f"Plan written to {target}")
+                click.echo(
+                    f"  candidates: {len(plan['candidates'])}; "
+                    f"projects with activity: "
+                    f"{len(plan['active_projects_with_activity'])}"
+                )
+            else:
+                assert apply_path is not None
+                plan = json.loads(apply_path.read_text(encoding="utf-8"))
+                result = compact_ops.apply_compaction(root, idx, plan)
+                click.echo(
+                    f"Applied: {result.promoted} promoted, "
+                    f"{result.skipped} skipped."
+                )
+                if result.log_path:
+                    click.echo(f"  log: {result.log_path.relative_to(root)}")
+    except PaceLockBusy as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
+# ---- review ------------------------------------------------------------
+
+
+@main.command()
+@click.option("--plan", "plan_mode", is_flag=True, help="Generate a review plan as JSON.")
+@click.option(
+    "--apply",
+    "apply_path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Apply the approvals + weekly synthesis in the given plan file.",
+)
+@click.option(
+    "--out",
+    "out_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="(--plan only) Write plan JSON to this path. Default: system/logs/.",
+)
+def review(plan_mode: bool, apply_path: Path | None, out_path: Path | None) -> None:
+    """Run weekly deep review (PRD §6.4). Use --plan to generate, --apply to execute."""
+    _check_plan_apply_args(plan_mode, apply_path)
+    root = require_vault_root()
+
+    try:
+        with acquire_pace_lock(root), _open_index(root) as idx:
+            if plan_mode:
+                plan = review_ops.plan_review(root, idx)
+                target = _resolve_plan_out_path(root, out_path, kind="review")
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
+                click.echo(f"Plan written to {target}")
+                click.echo(
+                    f"  archival candidates: {len(plan['candidates'])}; "
+                    f"broken wikilinks: {len(plan['broken_wikilinks'])}"
+                )
+            else:
+                assert apply_path is not None
+                plan = json.loads(apply_path.read_text(encoding="utf-8"))
+                result = review_ops.apply_review(root, idx, plan)
+                click.echo(
+                    f"Applied: {result.archived} archived, "
+                    f"{result.skipped} skipped, "
+                    f"weekly note {'written' if result.weekly_note_written else 'skipped'}."
+                )
+                if result.log_path:
+                    click.echo(f"  log: {result.log_path.relative_to(root)}")
+    except PaceLockBusy as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
 # ---- reindex -----------------------------------------------------------
 
 
@@ -361,6 +470,22 @@ def _open_index(root: Path) -> Iterator[Index]:
         yield idx
     finally:
         idx.close()
+
+
+def _check_plan_apply_args(plan_mode: bool, apply_path: Path | None) -> None:
+    """Enforce that exactly one of --plan / --apply is provided."""
+    if plan_mode and apply_path:
+        raise click.UsageError("--plan and --apply are mutually exclusive.")
+    if not plan_mode and apply_path is None:
+        raise click.UsageError("Specify --plan to generate or --apply <file> to execute.")
+
+
+def _resolve_plan_out_path(root: Path, out: Path | None, *, kind: str) -> Path:
+    """Default plan files land in ``system/logs/<kind>-plan-<stamp>.json``."""
+    if out is not None:
+        return out
+    stamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    return root / "system" / "logs" / f"{kind}-plan-{stamp}.json"
 
 
 # Convert VaultNotFoundError into a friendly Click message globally.
