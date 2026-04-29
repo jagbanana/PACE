@@ -75,6 +75,8 @@ def init(root: Path | None) -> None:
         click.echo("  Created files:")
         for f in result.created_files:
             click.echo(f"    + {f}")
+    if result.git_initialized:
+        click.echo("  Initialized git repository (branch: main).")
 
 
 # ---- status ------------------------------------------------------------

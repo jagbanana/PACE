@@ -450,6 +450,7 @@ def pace_init(root: str | None = None) -> dict[str, Any]:
         "created_dirs": result.created_dirs,
         "created_files": result.created_files,
         "already_initialized": result.already_initialized,
+        "git_initialized": result.git_initialized,
     }
 
 

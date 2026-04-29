@@ -4,14 +4,15 @@ This module owns the rules for how a freshly-initialized vault looks on
 disk, and how to rebuild the SQLite index from disk content for the case
 where the user edited markdown files directly in Obsidian.
 
-Phase 3 added ``.mcp.json`` generation here so the MCP server is wired
-up on the very first ``pace init``. Phase 4 will layer the CLAUDE.md
-template, scheduled-task registration, and ``git init`` on top.
+Phase 3 added ``.mcp.json`` generation. Phase 4 layers the in-vault
+``CLAUDE.md``, scheduled-task prompt files, and best-effort ``git init``
+on top so a fresh ``pace init`` produces a fully-bootstrapped vault.
 """
 
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,6 +20,7 @@ from pathlib import Path
 from pace import frontmatter, wikilinks
 from pace.index import Index, now_iso
 from pace.io import atomic_write_text
+from pace.onboarding import CLAUDE_MD_TEMPLATE, COMPACT_PROMPT, REVIEW_PROMPT
 from pace.paths import (
     ARCHIVED_DIR,
     INDEX_DB,
@@ -31,6 +33,13 @@ from pace.paths import (
     is_initialized,
 )
 
+# Where the scheduled-task prompts live in a vault. Kept in sync with the
+# instruction in CLAUDE.md ("read system/prompts/compact.md verbatim").
+PROMPTS_DIR = "system/prompts"
+COMPACT_PROMPT_PATH = f"{PROMPTS_DIR}/compact.md"
+REVIEW_PROMPT_PATH = f"{PROMPTS_DIR}/review.md"
+CLAUDE_MD_PATH = "CLAUDE.md"
+
 VAULT_DIRS: tuple[str, ...] = (
     MEMORIES_DIR,
     LONG_TERM_DIR,
@@ -38,6 +47,7 @@ VAULT_DIRS: tuple[str, ...] = (
     PROJECTS_DIR,
     SYSTEM_DIR,
     LOGS_DIR,
+    PROMPTS_DIR,
 )
 
 VAULT_GITIGNORE = """\
@@ -85,6 +95,7 @@ class InitResult:
     created_dirs: list[str]
     created_files: list[str]
     already_initialized: bool
+    git_initialized: bool = False
 
 
 @dataclass(frozen=True)
@@ -143,6 +154,30 @@ def init(root: Path) -> InitResult:
         atomic_write_text(mcp_config_path, payload)
         created_files.append(".mcp.json")
 
+    # CLAUDE.md ---------------------------------------------------------
+    # Idempotent: if the user (or this source repo) already has a
+    # CLAUDE.md, leave it alone. The user may have customized it.
+    claude_md_path = root / CLAUDE_MD_PATH
+    if not claude_md_path.exists():
+        atomic_write_text(claude_md_path, CLAUDE_MD_TEMPLATE)
+        created_files.append(CLAUDE_MD_PATH)
+
+    # Scheduled-task prompts -------------------------------------------
+    # Written verbatim into the vault so the user can inspect or tweak
+    # them, and so the model can hand them to mcp__scheduled-tasks
+    # without out-of-band coordination during onboarding beat 2.
+    for rel, content in (
+        (COMPACT_PROMPT_PATH, COMPACT_PROMPT),
+        (REVIEW_PROMPT_PATH, REVIEW_PROMPT),
+    ):
+        prompt_path = root / rel
+        if not prompt_path.exists():
+            atomic_write_text(prompt_path, content)
+            created_files.append(rel)
+
+    # Git --------------------------------------------------------------
+    git_initialized = _maybe_git_init(root)
+
     # If we just created the working_memory file, register it in the
     # freshly-built index so the first ``pace status`` reflects reality.
     if WORKING_MEMORY in created_files:
@@ -167,7 +202,30 @@ def init(root: Path) -> InitResult:
         created_dirs=created_dirs,
         created_files=created_files,
         already_initialized=already,
+        git_initialized=git_initialized,
     )
+
+
+def _maybe_git_init(root: Path) -> bool:
+    """Run ``git init -b main`` in ``root`` if it isn't already a repo.
+
+    Best-effort. Skips silently if git is missing from PATH, returns
+    False if the dir is already a repo. The model can suggest a first
+    commit at the end of onboarding (PRD §6.1 step 5); we don't auto-
+    commit because the user hasn't reviewed the contents yet.
+    """
+    if (root / ".git").exists():
+        return False
+    try:
+        subprocess.run(
+            ["git", "init", "-b", "main"],
+            cwd=root,
+            check=True,
+            capture_output=True,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return False
+    return True
 
 
 def reindex(root: Path, index: Index) -> ReindexResult:

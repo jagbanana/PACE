@@ -1,3 +1,28 @@
+"""Onboarding artifacts emitted by ``pace init``.
+
+This module owns three pieces of prompt copy that ship into every fresh
+PACE vault:
+
+* :data:`CLAUDE_MD_TEMPLATE` — the in-vault ``CLAUDE.md`` that tells the
+  model how to behave. Every line is sent on every turn; treat tokens as
+  precious. Reviewed against PRD §5.2 and Appendix A.
+* :data:`COMPACT_PROMPT` — the daily scheduled-task prompt (``system/
+  prompts/compact.md``) that drives ``pace compact`` (Phase 5).
+* :data:`REVIEW_PROMPT` — the weekly scheduled-task prompt (``system/
+  prompts/review.md``) that drives ``pace review`` (Phase 5).
+
+The model itself reads the prompt files and hands them to Cowork's
+``mcp__scheduled-tasks`` MCP during onboarding beat 2 — PACE never
+proxies that registration. Prompts live in the vault so the user can
+inspect or tweak them without touching source code.
+"""
+
+from __future__ import annotations
+
+# CLAUDE.md emitted into a freshly-initialized vault. Kept as terse as
+# possible without losing concrete invocation triggers — every word lands
+# in the model's context every turn.
+CLAUDE_MD_TEMPLATE = """\
 # PACE — context for this folder
 
 This folder is a **PACE vault**: a persistent-memory system that runs
@@ -123,18 +148,98 @@ End onboarding. Resume normal flow with the user's next message.
 If the user ever asks "what are you saving about me?", point them at
 `/memories/long_term/` — everything is human-readable Markdown,
 nothing is hidden.
+"""
 
-## This folder is also the PACE source repo
 
-See `PACE Dev Plan.md` for phase-by-phase development scope and
-conventions. When modifying source code under `src/pace/`:
+# Daily compaction prompt — committed into the vault as
+# `system/prompts/compact.md`. Phase 5 implements ``pace compact``;
+# this prompt forward-references it.
+COMPACT_PROMPT = """\
+# PACE daily compaction
 
-- Use `pathlib` for all paths (Mac compatibility is v1.1).
-- All file writes go through `pace.io.atomic_write_text` — survives
-  OneDrive sync.
-- The CLI in `pace.cli` is the only writer to the vault; the MCP
-  server in `pace.mcp_server` delegates to the same Python functions.
-- After any change, run `pytest` + `ruff check` from `.venv` before
-  committing.
-- The vault directories under this repo (`memories/`, `projects/`,
-  `system/`) are gitignored — never commit user content here.
+You are running the **daily compaction** for a PACE vault. Your job is
+to keep `memories/working_memory.md` tidy, promote stable facts to
+`/memories/long_term/`, and refresh project summaries that saw activity
+yesterday. PRD reference: §6.3.
+
+## Steps
+
+1. Run `pace compact --plan` to produce a JSON list of merge / promote
+   / update candidates with the relevant content snippets attached.
+2. For each candidate, decide:
+   - **Merge** — when two entries describe the same fact, combine them
+     into the more complete version.
+   - **Promote** — when a working-memory entry meets the rules below,
+     move it into the appropriate `/memories/long_term/<topic>.md`.
+   - **Update project summary** — when a project saw working-memory
+     activity, refresh `projects/<name>/summary.md` to reflect current
+     state and next steps.
+   - **Skip** — when the entry is still in flux. Better to keep noise
+     than to lose context.
+3. Apply the approved actions with `pace compact --apply <plan-file>`.
+4. Run `pace status` and append the counts to `system/logs/`.
+
+## Promotion rules (PRD §6.10)
+
+A working entry is a promotion candidate when **either**:
+
+- `date_created` > 7 days old AND it has been referenced (loaded via
+  `pace_load_project` or wikilinked from another file) at least once;
+- OR it carries a high-signal tag: `#person`, `#identifier`,
+  `#decision`, `#business` — these are inherently long-term.
+
+## Retention exemptions
+
+NEVER auto-archive entries tagged `#high-signal`, `#decision`, or
+`#user`. Losing those costs exactly what PACE was built to preserve.
+
+## Style
+
+Be conservative. When in doubt, keep. The user can always ask you to
+trim later, but they can't easily recover a fact you discarded.
+"""
+
+
+# Weekly review prompt — committed as `system/prompts/review.md`.
+REVIEW_PROMPT = """\
+# PACE weekly deep review
+
+You are running the **weekly deep review** for a PACE vault. Your job
+is to archive truly-stale long-term memory, validate cross-file links,
+refresh project summaries, and produce a synthesis note for the week.
+PRD reference: §6.4.
+
+## Steps
+
+1. Run `pace review --plan` to produce archival candidates with
+   reference-history and a broken-wikilink report.
+2. For each archival candidate, confirm it's no longer relevant given
+   current `working_memory.md` and active projects. When in doubt,
+   keep. Skip anything tagged `#high-signal`, `#decision`, or `#user`.
+3. Apply with `pace review --apply <plan-file>`.
+4. Re-validate every active project's `summary.md` against its
+   `notes/`. Flag anything that drifts.
+5. Write a synthesis note at `memories/long_term/weekly_<YYYY-WW>.md`
+   summarizing themes, decisions, and notable events from the week.
+6. Append counts and any unresolved items to `system/logs/`.
+
+## Archival rules (PRD §6.10)
+
+An entry is an archival candidate when **all three** are true:
+
+- `date_modified` > 90 days old.
+- Zero references logged in the last 60 days (combined wikilinks +
+  project loads in the `refs` table).
+- The entry is no longer relevant given current working memory.
+
+## Wikilink validation
+
+For each `[[Target]]` that doesn't resolve to a vault file, record it
+to the log. Do NOT auto-fix — surface unresolved links to the user via
+the next session's `pace_status` so they can decide.
+
+## Style
+
+Synthesis matters more than counts. The weekly note is what the user
+reads to feel that PACE is doing something.
+"""
