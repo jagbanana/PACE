@@ -1,0 +1,49 @@
+# --- PACE runtime artifacts (created by `pace init`; never committed) ---
+# This repo is the published source. The maintainer keeps a separate copy
+# of this folder as their actual vault.
+/memories/
+/projects/
+/system/pace_index.db
+/system/pace_index.db-wal
+/system/pace_index.db-shm
+/system/.pace.lock
+/system/logs/
+pace_config.yaml
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+build/
+dist/
+.eggs/
+
+# --- Virtualenvs ---
+.venv/
+venv/
+env/
+
+# --- Tooling caches ---
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# --- OS & editor ---
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+
+# --- OneDrive sync residue ---
+*.tmp
+~$*
+* (Conflicted Copy *).md
+
+# --- Claude Cowork local state ---
+.claude/settings.local.json
