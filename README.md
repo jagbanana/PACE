@@ -21,14 +21,17 @@ The plugin **bundles the PACE Python source inside its zip**. Nothing is fetched
 > **Heads up — Cowork and Claude Code share the desktop app but use *separate* plugin stores.** A plugin installed via the desktop app's *Settings → Customize* screen lands in Claude Code's store and **does not appear in Cowork**. Cowork has its own marketplace folder under your Cowork session directory, and a plugin must be extracted there specifically. The full flow is in [`plugin/README.md`](plugin/README.md); the short version is below.
 
 1. Install [`uv`](https://docs.astral.sh/uv/). Restart Cowork (full quit, including tray processes) so the new `PATH` propagates.
-2. Download `pace-memory.plugin` from the [releases page](https://github.com/justingesso/pace/releases) (or build it from source — see [Building the plugin](#building-the-plugin) below).
-3. **Extract** the `.plugin` zip into Cowork's local-uploads marketplace. Use Windows' built-in *Extract All*, Git Bash's `unzip`, or 7-Zip — *not* Python's `zipfile.extractall`, which trips over Windows MAX_PATH (260 chars) given Cowork's deep session paths. Target:
+2. Download `pace-memory.plugin` from the [releases page](https://github.com/justingesso/pace/releases) (or build it from source — see [Building the plugin](#building-the-plugin) below). The `.plugin` file *is* a zip — same archive format, different extension by convention.
+3. **Extract** `pace-memory.plugin` into Cowork's local-uploads marketplace. Easiest method on Windows: PowerShell's built-in `tar` works on `.plugin` directly without renaming.
+   ```powershell
+   $dest = "$env:APPDATA\Claude\local-agent-mode-sessions\<session>\<session>\cowork_plugins\marketplaces\local-desktop-app-uploads\pace-memory"
+   New-Item -ItemType Directory -Path $dest -Force | Out-Null
+   tar -xf "C:\path\to\pace-memory.plugin" -C $dest
    ```
-   %APPDATA%\Claude\local-agent-mode-sessions\<session>\<session>\cowork_plugins\marketplaces\local-desktop-app-uploads\pace-memory\
-   ```
+   *(Other extractors that work: 7-Zip, Git Bash's `unzip`, or Windows' built-in *Extract All* after renaming `.plugin` to `.zip`. Don't use Python's `zipfile.extractall` — it doesn't opt into Windows long paths and Cowork's session-UUID nesting will trip MAX_PATH.)*
 4. **Register** the plugin in that marketplace's `marketplace.json` by adding a `{ "name": "pace-memory", "source": "./pace-memory", "description": "..." }` entry to the `plugins` array. Full example in [`plugin/README.md`](plugin/README.md#step-5--register-the-plugin-in-the-marketplace-manifest).
 5. **Restart Cowork**, open its plugin/customize panel, find `pace-memory` listed, and enable it. Cowork prompts for the optional `vaultRoot` field — leave blank to let onboarding pick a path.
-6. Open Cowork in any folder and start a conversation. The bundled skill detects an uninitialized vault and runs a short three-question onboarding (your name, optional assistant nickname, where to put the vault and what kind of work you're doing). After that, just talk.
+6. Open Cowork in any folder and start a conversation. The bundled skill detects an uninitialized vault and runs a short three-question onboarding (your name, an optional assistant nickname + emoji, and where to put the vault). After that, just talk.
 
 Full plugin docs (including the long-path / extraction gotcha and how to verify the install landed in the right store): [`plugin/README.md`](plugin/README.md).
 
@@ -69,12 +72,17 @@ python scripts/build_plugin.py
 # → dist/pace-memory.plugin
 ```
 
-The build script:
-1. **Stages** the runtime Python source into `plugin/server/` — `src/pace/`, `pyproject.toml`, `LICENSE`, plus a minimal in-zip `README.md`. `plugin/server/` is gitignored; it's a build artifact, regenerated on every build.
+The build script writes a single file: `dist/pace-memory.plugin`. **That file *is* the plugin zip** — same archive format as `.zip`, just named with the `.plugin` extension Anthropic's plugin spec uses. There's no separate `.zip` artifact.
+
+What the script does:
+
+1. **Stages** the runtime Python source into a temp directory — `src/pace/`, `pyproject.toml`, `LICENSE`, plus a minimal in-zip `README.md`. The temp dir lives outside the source tree (and outside OneDrive) so file locking can't fight us.
 2. **Sanity-checks** that `plugin/.claude-plugin/plugin.json`'s `version` matches `pace.__version__` so a forgotten bump fails loudly.
-3. **Zips** `plugin/` (now including `server/`) into `dist/pace-memory.plugin`.
+3. **Zips** `plugin/` plus the staged source (under the `server/` arc-name prefix) into `dist/pace-memory.plugin`.
 
 At runtime, the plugin's `.mcp.json` runs `uvx --from ${CLAUDE_PLUGIN_ROOT}/server pace-mcp`, which resolves the bundled source and runs the MCP server. No PyPI publish required.
+
+If you need a `.zip`-extension copy for a tool that doesn't recognize `.plugin`, just copy the file: `cp dist/pace-memory.plugin dist/pace-memory.zip`.
 
 ## Vault location resolution
 

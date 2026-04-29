@@ -45,8 +45,14 @@ uv --version
 
 Download the latest `pace-memory.plugin` from the
 [PACE releases page](https://github.com/justingesso/pace/releases),
-or build it from the source repo (`python scripts/build_plugin.py`).
-The result is a zip with the file extension `.plugin`.
+or build it from the source repo (`python scripts/build_plugin.py`,
+which writes `dist/pace-memory.plugin`).
+
+> **About the file extension.** A `.plugin` file is just a zip archive
+> with a different name — that's the convention Anthropic's plugin
+> spec uses. There is no separate `.zip` file anywhere; if you opened
+> `pace-memory.plugin` with 7-Zip, you'd see all the contents. The
+> extraction steps below treat it as a zip throughout.
 
 ### Step 2 — Try Cowork's UI first
 
@@ -78,10 +84,19 @@ That's where local plugins go. The folder should already contain a
 
 ### Step 4 — Extract the `.plugin` into a subfolder
 
-The marketplace expects each plugin as an extracted directory, **not
-a zip**. Right-click `pace-memory.plugin` in File Explorer, choose
-*Extract All*, and extract into the marketplace folder. Rename the
-resulting directory to `pace-memory` so the layout is:
+The marketplace expects each plugin as an **extracted directory**,
+not the zip file itself. Recommended approach on Windows: use the
+built-in `tar` (works on `.plugin` directly without renaming) from
+PowerShell.
+
+```powershell
+$plugin = "C:\path\to\pace-memory.plugin"   # adjust to where you saved it
+$dest   = "$env:APPDATA\Claude\local-agent-mode-sessions\<session>\<session>\cowork_plugins\marketplaces\local-desktop-app-uploads\pace-memory"
+New-Item -ItemType Directory -Path $dest -Force | Out-Null
+tar -xf $plugin -C $dest
+```
+
+After extraction the layout should be:
 
 ```
 local-desktop-app-uploads\
@@ -95,12 +110,21 @@ local-desktop-app-uploads\
     └── system-prompts\
 ```
 
-> **Don't extract using Python's `zipfile.extractall` from a script
-> on Windows.** The Cowork session path nests two UUIDs deep; combined
-> with the plugin's internal nesting you can blow past Windows
-> MAX_PATH (260 chars) and `extractall` fails with `FileNotFoundError`
-> *while creating files*. Windows' built-in *Extract All* handles long
-> paths correctly. So does Git Bash's `unzip` and 7-Zip.
+**Other extractors that work:**
+
+- **7-Zip** — handles `.plugin` directly; right-click → 7-Zip →
+  Extract files.
+- **Git Bash's `unzip`** — `unzip pace-memory.plugin -d <dest>`.
+- **Windows' built-in *Extract All*** — only after renaming the
+  file extension from `.plugin` to `.zip`. (File Explorer shows
+  *Extract All* by extension, not by content.)
+
+**Don't use Python's `zipfile.extractall`** from a script on Windows
+without long-path mode. The Cowork session path is already two UUIDs
+deep; combined with the plugin's internal `skills\pace-memory\references\
+onboarding.md` nesting you can blow past Windows MAX_PATH (260 chars)
+mid-extraction and the extractor fails with `FileNotFoundError`. The
+extractors above all opt into long paths correctly.
 
 ### Step 5 — Register the plugin in the marketplace manifest
 
@@ -291,16 +315,29 @@ next entry).
 
 You hit Windows' MAX_PATH (260-char) limit while extracting the
 plugin. The Cowork session directory contains two UUIDs that already
-eat ~80 chars; combined with the plugin's internal `skills\pace-memory\references\onboarding.md`
-nesting, some files blow past the limit. Solutions, in order of
-preference:
+eat ~80 chars; combined with the plugin's internal
+`skills\pace-memory\references\onboarding.md` nesting, some files
+blow past the limit. Solutions, in order of preference:
 
-1. **Use Windows' built-in *Extract All*** (right-click the `.plugin`
-   file). It handles long paths via the `\\?\` prefix internally.
-2. **Use Git Bash's `unzip`** — it works fine on long paths.
-3. **Use 7-Zip** if you have it installed.
-4. **Avoid Python's `zipfile.extractall`** from scripts — it does
+1. **`tar -xf` from PowerShell** — built into Windows 10/11, opts
+   into long paths automatically, and works on `.plugin` directly:
+   `tar -xf pace-memory.plugin -C <destination>`.
+2. **Git Bash's `unzip`** — `unzip pace-memory.plugin -d <destination>`,
+   no rename required.
+3. **7-Zip** — if installed, right-click → 7-Zip → Extract files.
+4. **Windows' built-in *Extract All*** — only after renaming the
+   file extension from `.plugin` to `.zip` (File Explorer keys off
+   the extension to decide whether to offer *Extract All*).
+5. **Avoid Python's `zipfile.extractall`** from scripts — it does
    *not* automatically opt into long-path mode on Windows.
+
+### "Where's the zip file?" — there isn't one separately
+
+A `.plugin` file IS a zip archive, just with the extension Anthropic's
+plugin spec uses. The build script writes a single
+`dist/pace-memory.plugin`; that's the zip. If you need to convince a
+tool that doesn't understand the `.plugin` extension, copy the file
+to `pace-memory.zip` and use that copy.
 
 ### "Tools don't appear" but `installed_plugins.json` shows pace-memory
 
