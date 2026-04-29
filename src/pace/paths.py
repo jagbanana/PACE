@@ -36,6 +36,8 @@ WORKING_MEMORY = "memories/working_memory.md"
 LONG_TERM_DIR = "memories/long_term"
 ARCHIVED_DIR = "memories/archived"
 PROJECTS_DIR = "projects"
+FOLLOWUPS_DIR = "followups"
+FOLLOWUPS_DONE_DIR = "followups/done"
 
 
 def find_vault_root(start: Path | None = None) -> Path | None:

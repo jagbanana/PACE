@@ -13,7 +13,18 @@
 
 **Every new Claude session is like onboarding a brand-new intern.** You're sitting across from an incredibly book-smart assistant who knows nothing about your work, your style, your preferences, your business, or the people in your orbit. Tomorrow, same intern. Next month, same intern. Claude Projects and the Desktop app's memory features chip away at this — but neither gives you a system that *grows and evolves with you*, actually learning your decisions, your taste, and the texture of your business over weeks and months.
 
-PACE solves that. It lets you stand up **individual, named coworkers** — each with its own personality and its own persistent memory — that mature from intern, to junior, to senior over the course of weeks of real work. The model behind it is the human one: each PACE coworker handles 3–4 projects for you, just like a real employee, and you bring them up the curve over time. Each has a name, an emoji, and a voice; each remembers the last conversation, the last decision, and why you made it.
+PACE solves that. It lets you stand up **individual, named coworkers**, each with its own personality and its own persistent memory. PACE agents mature from intern, to junior, to senior over the course of weeks of real work. 
+
+- Core OpenClaw workflows bundled as a Claude Cowork plugin
+- Each PACE agent can handle multiple projects, just like real humans
+- Learns your work style, preferences, and project details, evolving to you and the job
+- Optional heartbeat for proactive tasks
+- Adheres to your Claude Desktop App permission and security settings
+- Maintains long-term memory without bloating context
+- Performs its own maintenance, staying performant via indexing and linking
+- Everything is human readable via Obsidian
+
+The model behind it is the human one: each PACE coworker handles 3–4 projects for you, just like a real employee, and you bring them up the curve over time. Each has a name, an emoji, and a voice; each remembers the last conversation, the last decision, and why you made it.
 
 PACE provides the core **persistent-agent capabilities** you'd find in projects like OpenClaw, but packaged as a Claude Cowork plugin and aimed at mature, day-to-day business use rather than experimental tinkering. The vault is plain Markdown on your local disk, the storage is human-readable and grep-able, and nothing is hidden from you.
 
@@ -31,7 +42,7 @@ It's built for **knowledge work** — research, marketing, planning, strategy, a
 
 ### Status
 
-v0.1.2 — beta. The Cowork plugin and Claude Code CLI workflow are both stable; 160+ tests cover capture, search, compaction, review, and the MCP surface. Used daily by the maintainer. Mac dogfood pending; Windows + OneDrive is the primary target.
+v0.2.0 — beta. The Cowork plugin and Claude Code CLI workflow are both stable; 220+ tests cover capture, search, compaction, review, the proactive heartbeat, and the MCP surface. Used daily by the maintainer. Mac dogfood pending; Windows + OneDrive is the primary target.
 
 ---
 
@@ -40,33 +51,35 @@ v0.1.2 — beta. The Cowork plugin and Claude Code CLI workflow are both stable;
 PACE has four moving parts that all read from and write to a folder of Markdown files (the "vault"):
 
 ```
-                     ┌────────────────────────────────────────┐
-                     │              YOUR VAULT                │
-                     │     (Markdown + SQLite + YAML)         │
-                     │                                        │
-                     │   memories/   projects/   system/      │
-                     └──▲──────────────▲──────────────▲───────┘
-                        │              │              │
-                  reads / writes  reads / writes  reads / writes
-                        │              │              │
-        ┌───────────────┴──┐    ┌──────┴────────┐ ┌──┴────────────────┐
-        │   MCP server     │    │      CLI      │ │  Scheduled tasks  │
-        │  (pace_mcp)      │    │     (pace)    │ │ (daily / weekly)  │
-        │                  │    │               │ │                   │
-        │  pace_status     │    │ pace init     │ │ compact prompt    │
-        │  pace_capture    │    │ pace status   │ │ review prompt     │
-        │  pace_search     │    │ pace capture  │ │                   │
-        │  pace_load_proj. │    │ pace search   │ │ run inside Cowork │
-        │  pace_create_*   │    │ pace doctor   │ │ no API calls      │
-        │  pace_init       │    │ pace reindex  │ │                   │
-        │  pace_list_proj. │    │ pace archive  │ │                   │
-        └────────▲─────────┘    │ pace compact  │ └─────────▲─────────┘
-                 │              │ pace review   │           │
-                 │              └───────────────┘           │
-            invoked by                                  invoked by
-            the model                                  Cowork's
-            (Claude in Cowork                          scheduled-task
-             or Claude Code)                           system
+                     ┌──────────────────────────────────────────────────┐
+                     │                   YOUR VAULT                     │
+                     │            (Markdown + SQLite + YAML)            │
+                     │                                                  │
+                     │  memories/  projects/  followups/  system/       │
+                     └──▲────────────────▲─────────────────▲────────────┘
+                        │                │                 │
+                  reads / writes    reads / writes    reads / writes
+                        │                │                 │
+        ┌───────────────┴──┐    ┌────────┴──────┐ ┌────────┴────────────┐
+        │   MCP server     │    │      CLI      │ │   Scheduled tasks   │
+        │  (pace_mcp)      │    │     (pace)    │ │ daily / weekly /    │
+        │                  │    │               │ │ heartbeat (opt-in)  │
+        │  pace_status     │    │ pace init     │ │                     │
+        │  pace_capture    │    │ pace status   │ │ compact prompt      │
+        │  pace_search     │    │ pace capture  │ │ review prompt       │
+        │  pace_load_proj. │    │ pace search   │ │ heartbeat prompt    │
+        │  pace_create_*   │    │ pace doctor   │ │                     │
+        │  pace_init       │    │ pace reindex  │ │ run inside Cowork   │
+        │  pace_list_proj. │    │ pace archive  │ │ no API calls        │
+        │  pace_*followup  │    │ pace compact  │ │                     │
+        └────────▲─────────┘    │ pace review   │ └──────────▲──────────┘
+                 │              │ pace heartbeat│            │
+                 │              │ pace followup │            │
+                 │              └───────────────┘            │
+            invoked by                                   invoked by
+            the model                                   Cowork's
+            (Claude in Cowork                           scheduled-task
+             or Claude Code)                            system
 ```
 
 The MCP server and the CLI are thin wrappers over the same Python functions — there's a single source of truth for every read and every write.
@@ -94,12 +107,18 @@ your-vault/
 │   └── website-redesign/
 │       └── summary.md
 │
+├── followups/                     ← proactive heartbeat inbox (v0.2)
+│   ├── f-2026-04-29-103745-abc.md ← pending or ready item
+│   └── done/
+│       └── f-2026-04-25-141200-jkl.md
+│
 ├── system/
 │   ├── pace_index.db              ← SQLite FTS5 index (rebuildable)
 │   ├── pace_config.yaml           ← tunables (budgets, retention, etc.)
 │   ├── prompts/
 │   │   ├── compact.md             ← daily-task prompt (read by Cowork)
-│   │   └── review.md              ← weekly-task prompt
+│   │   ├── review.md              ← weekly-task prompt
+│   │   └── heartbeat.md           ← optional proactive heartbeat
 │   └── logs/                      ← maintenance run logs
 │
 ├── .mcp.json                      ← Claude Code stdio server registration
@@ -158,13 +177,14 @@ This is the heart of PACE. The design is built around two unavoidable facts:
 
 So PACE separates memory into tiers, only loads the smallest one at session start, and runs scheduled jobs to move information through the tiers as it ages.
 
-### The four tiers
+### The five tiers
 
 | Tier | Loaded when? | What lives here | How it gets here |
 |---|---|---|---|
 | **Working** (`memories/working/`) | **Always**, via `pace_status` at session start | Today's captures, ephemeral notes, anything not yet promoted | Every `pace_capture` defaults here |
 | **Long-term** (`memories/long_term/`) | On demand, via `pace_search` | Stable facts about people, identifiers, decisions, preferences, business context | Daily compaction promotes from working; identity-pin captures land here directly |
 | **Project** (`projects/<name>/`) | On demand, via `pace_load_project` | A project's `summary.md` plus topical notes; loaded as a unit when the user mentions the project | Created by `pace_create_project`; populated by captures with `kind=project_summary` or `project_note` |
+| **Followups** (`followups/`) | **Ready items always**, via `pace_status.inbox` at session start | Proactive things to resurface — dated reminders, stale commitments, recurring patterns the heartbeat noticed | `pace_add_followup` (manual), or the heartbeat scanner (auto). Resolved items move to `followups/done/` |
 | **Archived** (`memories/archived/`) | Never (search-only) | Long-term entries that aged out without being referenced | Weekly review moves stale entries here; nothing is ever deleted |
 
 ### What gets captured (and what doesn't)
@@ -269,6 +289,82 @@ If both are yes **and** the entry doesn't carry a retention-exempt tag (`#user`,
 
 Review also writes a short synthesis note for the week — themes that emerged across captures, decisions made, anything worth surfacing.
 
+### Proactive heartbeat — useful nudges, never naggy *(opt-in, v0.2)*
+
+Most memory systems are passive: they remember things if you ask. PACE has an optional **heartbeat** that goes one step further — it quietly checks during your work hours for things worth flagging, and surfaces them at the **start of your *next* session**. It never interrupts mid-conversation, never sends OS notifications, and the default outcome of any single run is silence.
+
+You opt in during onboarding and define your working hours (default: 9:00–17:00, Mon–Fri). The heartbeat then runs as a third Cowork scheduled task and looks at three signals:
+
+```
+   ┌──────────────────────────────────────────────────────────┐
+   │ pace heartbeat --plan         (every cadence_minutes,    │
+   │                                inside working hours)     │
+   │                                                          │
+   │   1. Ripe date triggers — pending followups whose date   │
+   │      arrived → flip to ready                             │
+   │   2. Stale commitments — TODO/"I'll …"/"let's …" entries │
+   │      older than N days with no follow-through            │
+   │   3. Patterns — repeated person mentions not yet in      │
+   │      long-term, clusters of similar #decision entries    │
+   └─────────────────────┬────────────────────────────────────┘
+                         │  (Claude reviews; default = skip;
+                         │   approves only items with real signal)
+                         ▼
+   ┌──────────────────────────────────────────────────────────┐
+   │ pace heartbeat --apply <plan.json>                       │
+   │   approved items become 'ready' followups in             │
+   │   followups/<id>.md                                      │
+   └─────────────────────┬────────────────────────────────────┘
+                         │
+                         ▼
+   ┌──────────────────────────────────────────────────────────┐
+   │ Next pace_status() at session start →                    │
+   │   inbox: [{id, body, priority, ...}, ...]                │
+   │                                                          │
+   │ Model surfaces them at the top of its first reply        │
+   │ ("oh — you asked me to flag the legal review today")     │
+   │ then resolves each via pace_resolve_followup once acted  │
+   │ on.                                                      │
+   └──────────────────────────────────────────────────────────┘
+```
+
+**Quality bar.** The scheduled-task prompt's first instruction is *the default outcome of a heartbeat run is silence*. The model is told to skip anything that's borderline, and PACE itself gates the run on three things: feature flag, working hours/days, and a cadence guard that prevents back-to-back fires even if Cowork's cron ticks more often.
+
+**Followup data model.** Each followup is a single Markdown file at `followups/<id>.md` with YAML frontmatter:
+
+```yaml
+---
+id: f-2026-04-29-103745-abc123
+kind: followup
+trigger: date          # date | stale | pattern | manual
+trigger_value: 2026-05-02
+status: pending        # pending | ready | done | dismissed
+priority: high         # low | normal | high
+created: 2026-04-29T10:37:45
+project: q3-launch     # optional
+---
+The legal review is due Friday — flag it that morning.
+```
+
+Resolved followups move under `followups/done/` (status preserved for audit). Nothing is ever deleted.
+
+**Manually adding a followup.** You don't have to wait for the heartbeat. When you say *"remind me Friday about the legal review"*, the model calls `pace_add_followup(body=..., trigger="date", trigger_value="2026-05-02")` and you'll see it pop up at session start that day. For "next time we talk" style asks, `trigger="manual"` makes it ready immediately.
+
+**Configuration.** Tunables live under the `heartbeat:` section of `system/pace_config.yaml`:
+
+```yaml
+heartbeat:
+  enabled: true
+  working_hours_start: "09:00"
+  working_hours_end:   "17:00"
+  working_days:        [mon, tue, wed, thu, fri]
+  cadence_minutes:     60       # min gap between runs
+  stale_age_days:      7        # commitment-age threshold
+  pattern_min_repeats: 3        # repeated mentions to surface
+```
+
+You can opt out at any time by flipping `enabled: false` (the scheduled task still ticks, but the orchestrator returns a no-op plan).
+
 ### Project context switching
 
 When you say *"let's work on the redesign"* — or anything topical that hints at a known project — the model:
@@ -363,6 +459,9 @@ The model uses MCP tools; humans use the CLI. They share the same underlying fun
 | `pace project list` / `create` / `load` / `rename` / `alias add\|remove` | Project lifecycle. |
 | `pace compact --plan` / `--apply <file>` | Daily compaction. |
 | `pace review --plan` / `--apply <file>` | Weekly review. |
+| `pace heartbeat --plan` / `--apply <file>` | Proactive heartbeat (v0.2). |
+| `pace followup add [--trigger ...] [--when ...] "<body>"` | Manually queue a proactive item. |
+| `pace followup list [--status ...]` / `resolve <id>` | Inspect or resolve inbox items. |
 | `pace archive <path>` | Move a Markdown file to `memories/archived/`. |
 | `pace doctor [--json]` | Health checks; never auto-fixes. |
 | `pace reindex` | Rebuild the FTS5 index from disk. |
@@ -402,7 +501,7 @@ ruff check            # lint
 ruff format           # auto-format
 ```
 
-There are 160+ tests covering capture, search, compaction, review, doctor, the MCP surface, plugin packaging, and onboarding artifacts.
+There are 220+ tests covering capture, search, compaction, review, the proactive heartbeat, the followups data model, doctor, the MCP surface, plugin packaging, and onboarding artifacts.
 
 ---
 
@@ -415,7 +514,7 @@ plugin/           # Cowork plugin source — bundled into pace-memory.plugin
   ├── .claude-plugin/plugin.json
   ├── .mcp.json
   ├── skills/pace-memory/    # SKILL.md the model loads at session start
-  └── system-prompts/        # compact.md, review.md (scheduled-task prompts)
+  └── system-prompts/        # compact.md, review.md, heartbeat.md (scheduled-task prompts)
 scripts/          # build_plugin.py
 pyproject.toml    # entry points: pace = pace.cli:main; pace-mcp = pace.mcp_server:main
 LICENSE

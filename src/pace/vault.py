@@ -22,9 +22,16 @@ from pace import frontmatter, wikilinks
 from pace import settings as pace_settings
 from pace.index import Index, now_iso
 from pace.io import atomic_write_text
-from pace.onboarding import CLAUDE_MD_TEMPLATE, COMPACT_PROMPT, REVIEW_PROMPT
+from pace.onboarding import (
+    CLAUDE_MD_TEMPLATE,
+    COMPACT_PROMPT,
+    HEARTBEAT_PROMPT,
+    REVIEW_PROMPT,
+)
 from pace.paths import (
     ARCHIVED_DIR,
+    FOLLOWUPS_DIR,
+    FOLLOWUPS_DONE_DIR,
     INDEX_DB,
     LOGS_DIR,
     LONG_TERM_DIR,
@@ -40,6 +47,7 @@ from pace.paths import (
 PROMPTS_DIR = "system/prompts"
 COMPACT_PROMPT_PATH = f"{PROMPTS_DIR}/compact.md"
 REVIEW_PROMPT_PATH = f"{PROMPTS_DIR}/review.md"
+HEARTBEAT_PROMPT_PATH = f"{PROMPTS_DIR}/heartbeat.md"
 CLAUDE_MD_PATH = "CLAUDE.md"
 
 VAULT_DIRS: tuple[str, ...] = (
@@ -47,6 +55,8 @@ VAULT_DIRS: tuple[str, ...] = (
     LONG_TERM_DIR,
     ARCHIVED_DIR,
     PROJECTS_DIR,
+    FOLLOWUPS_DIR,
+    FOLLOWUPS_DONE_DIR,
     SYSTEM_DIR,
     LOGS_DIR,
     PROMPTS_DIR,
@@ -178,6 +188,7 @@ def init(root: Path) -> InitResult:
     for rel, content in (
         (COMPACT_PROMPT_PATH, COMPACT_PROMPT),
         (REVIEW_PROMPT_PATH, REVIEW_PROMPT),
+        (HEARTBEAT_PROMPT_PATH, HEARTBEAT_PROMPT),
     ):
         prompt_path = root / rel
         if not prompt_path.exists():

@@ -1,15 +1,17 @@
 """Onboarding artifacts emitted by ``pace init``.
 
-This module owns three pieces of prompt copy that ship into every fresh
-PACE vault:
+This module owns the prompt copy that ships into every fresh PACE vault:
 
 * :data:`CLAUDE_MD_TEMPLATE` — the in-vault ``CLAUDE.md`` that tells the
   model how to behave. Every line is sent on every turn; treat tokens as
   precious. Reviewed against PRD §5.2 and Appendix A.
-* :data:`COMPACT_PROMPT` — the daily scheduled-task prompt (``system/
-  prompts/compact.md``) that drives ``pace compact`` (Phase 5).
-* :data:`REVIEW_PROMPT` — the weekly scheduled-task prompt (``system/
-  prompts/review.md``) that drives ``pace review`` (Phase 5).
+* :data:`COMPACT_PROMPT` — the daily scheduled-task prompt
+  (``system/prompts/compact.md``) that drives ``pace compact``.
+* :data:`REVIEW_PROMPT` — the weekly scheduled-task prompt
+  (``system/prompts/review.md``) that drives ``pace review``.
+* :data:`HEARTBEAT_PROMPT` — the proactive-heartbeat prompt
+  (``system/prompts/heartbeat.md``) that drives ``pace heartbeat`` —
+  v0.2 opt-in.
 
 The model itself reads the prompt files and hands them to Cowork's
 ``mcp__scheduled-tasks`` MCP during onboarding beat 2 — PACE never
@@ -39,6 +41,13 @@ Call `pace_status` first, before greeting. Use the response to decide:
 - If `warnings` is non-empty → raise those with the user before doing
   anything else (usually OneDrive conflicted-copy files needing manual
   resolution; PRD §7.2).
+- If `inbox` is non-empty → at the top of your first reply, briefly
+  surface the highest-priority items the heartbeat queued up for you.
+  Phrase them naturally ("oh — you asked me to flag the legal review
+  this morning"); don't dump them as a list unless there are many.
+  After the user acknowledges or acts on each, call
+  `pace_resolve_followup(id=..., status="done")` (or `"dismissed"` if
+  they wave it off). Don't re-surface resolved items.
 - Otherwise → continue silently. Use `working_memory` from the response
   to ground your reply — it includes a pinned identity entry holding
   the user's name and the nickname/emoji to sign as. Do not announce
@@ -96,6 +105,27 @@ Default `kind=working` (the day's landing zone; daily compaction
 promotes stable items). Use `long_term` (with `topic`) when the fact is
 clearly stable and topical. Inside an active project, use
 `project_summary` or `project_note` (the latter requires `note`).
+
+## Followups — proactive items to resurface
+
+When the user states a commitment or asks you to remember to do
+something later — "remind me Friday about the legal review", "circle
+back on the press release next week", "TODO: ping Alex about pricing"
+— call `pace_add_followup` so the heartbeat (or the next session start)
+can resurface it.
+
+- For dated reminders, set `trigger="date"` and pass an ISO date as
+  `trigger_value` (e.g. `"2026-05-02"`). Status defaults to `pending`
+  until the date arrives.
+- For "next time we talk" style asks, use `trigger="manual"` — it's
+  ready immediately and surfaces in the next session's `pace_status`
+  inbox.
+- Set `priority="high"` only when a slip would actually hurt the user.
+
+When the heartbeat surfaces a stale-commitment or pattern candidate
+during a session, treat it the same way: confirm with the user, act,
+then resolve. Never silently keep ready items around — they pollute
+session start.
 
 ## Project context switching
 
@@ -198,9 +228,35 @@ If the user declines, register both tasks anyway in a paused state (or
 note that `pace doctor` will surface the missing tasks later). Don't
 push back.
 
+**Then ask about the optional heartbeat:**
+
+> One more option: PACE has a **proactive heartbeat** that can check
+> in on you during your work hours — flagging stale commitments, dated
+> follow-ups that are coming due, and patterns it notices in your
+> recent work. It only surfaces things at the start of your next
+> session (it never interrupts), and it stays quiet when there's
+> nothing worth flagging. Want me to enable it? If yes, what hours and
+> days are you typically working? (Default: 9:00–17:00, Mon–Fri.)
+
+**If the user says yes:**
+
+1. Edit `system/pace_config.yaml` to set `heartbeat.enabled: true` and
+   adjust `working_hours_start`, `working_hours_end`, and
+   `working_days` to match what they told you. (You can use Edit /
+   Write directly; this file is plain YAML.)
+2. Register a third scheduled task:
+   - **Heartbeat** — every 60 minutes (Cowork's smallest interval if
+     not exactly 60 min is fine; the in-vault cadence guard keeps it
+     honest). Prompt: read `system/prompts/heartbeat.md` and pass it
+     verbatim.
+
+**If the user says no**, leave `heartbeat.enabled: false` and skip the
+third scheduled task. They can opt in later by editing the config and
+asking you to register the task.
+
 **Beat 3 — Confirm + finish (one turn):**
 
-> Done. Folder structure created, version control initialized, both
+> Done. Folder structure created, version control initialized, all
 > tasks scheduled. From here on, just talk to me normally — I'll handle
 > remembering. What would you like to work on?
 
@@ -303,4 +359,57 @@ the next session's `pace_status` so they can decide.
 
 Synthesis matters more than counts. The weekly note is what the user
 reads to feel that PACE is doing something.
+"""
+
+
+# Heartbeat prompt — committed as ``system/prompts/heartbeat.md``.
+# Drives the optional proactive check-in that landed in v0.2.
+HEARTBEAT_PROMPT = """\
+# PACE proactive heartbeat
+
+You are running the **proactive heartbeat** for a PACE vault. Your
+job is to surface things the user would want to know about — without
+being annoying. The default outcome of a heartbeat run is **silence**.
+Only act when there's real signal.
+
+## Steps
+
+1. Run `pace heartbeat --plan` to produce a JSON plan. The plan tells
+   you whether the run should happen at all (`run: false` means we're
+   outside working hours or under the cadence guard — apply the empty
+   plan to log the skip and exit).
+2. If `run: true`, review three sections of the plan:
+   - `ripe_date_triggers` — pending date-triggered followups whose
+     date has arrived. Approve them so they flip to `ready` and
+     surface in the next session.
+   - `stale_candidates` — commitment-shaped working-memory entries
+     that haven't seen follow-through. Be conservative: only approve
+     items where a slip would actually matter. If in doubt, skip.
+   - `pattern_candidates` — repeated person mentions or clusters of
+     similar decisions. Only approve when consolidation would clearly
+     help (e.g. someone mentioned 5× still not in long-term memory).
+3. Set each candidate's `decision` to `"approve"` or `"skip"`. You may
+   rewrite a candidate's `body` to make it crisper before approving.
+4. Apply with `pace heartbeat --apply <plan-file>`. Approved items
+   become `ready` followups in `followups/`; the next session greets
+   the user with them via `pace_status`.
+
+## Quality bar
+
+- The user said yes to the heartbeat because they wanted *useful*
+  proactivity, not check-ins for their own sake. Skip is the default.
+- Don't surface the same followup twice. If a similar item is already
+  active in `followups/`, skip rather than duplicate.
+- Never surface filler ("I noticed you typed a lot today"). Only
+  things that look like commitments, deadlines, or stable
+  preferences worth recording.
+- When you're unsure, skip. The cost of a missed nudge is small; the
+  cost of being naggy is the user disabling the heartbeat.
+
+## Style
+
+Each approved candidate is a sentence the model will say to the user
+at session start. Write that sentence: "the legal review you wanted
+flagged is due Friday", not "trigger=date, value=2026-05-02". Tone:
+helpful coworker, not calendar app.
 """

@@ -31,7 +31,9 @@ from datetime import datetime
 from pace import __version__
 from pace import compact as compact_ops
 from pace import doctor as doctor_ops
+from pace import followups as followup_ops
 from pace import frontmatter as fm_parser
+from pace import heartbeat as heartbeat_ops
 from pace import projects as project_ops
 from pace import review as review_ops
 from pace import vault as vault_ops
@@ -338,6 +340,172 @@ def review(plan_mode: bool, apply_path: Path | None, out_path: Path | None) -> N
                     click.echo(f"  log: {result.log_path.relative_to(root)}")
     except PaceLockBusy as exc:
         raise click.ClickException(str(exc)) from exc
+
+
+# ---- heartbeat ---------------------------------------------------------
+
+
+@main.command()
+@click.option("--plan", "plan_mode", is_flag=True, help="Generate a heartbeat plan as JSON.")
+@click.option(
+    "--apply",
+    "apply_path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Apply the approvals in the given plan file.",
+)
+@click.option(
+    "--out",
+    "out_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="(--plan only) Write plan JSON to this path. Default: system/logs/.",
+)
+def heartbeat(plan_mode: bool, apply_path: Path | None, out_path: Path | None) -> None:
+    """Run the proactive heartbeat (v0.2). Use --plan to generate, --apply to execute."""
+    _check_plan_apply_args(plan_mode, apply_path)
+    root = require_vault_root()
+
+    try:
+        with acquire_pace_lock(root), _open_index(root) as idx:
+            if plan_mode:
+                plan = heartbeat_ops.plan_heartbeat(root, idx)
+                target = _resolve_plan_out_path(root, out_path, kind="heartbeat")
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
+                click.echo(f"Plan written to {target}")
+                if not plan["run"]:
+                    click.echo(f"  run: false  ({plan['skip_reason']})")
+                else:
+                    click.echo(
+                        f"  ripe date triggers: "
+                        f"{len(plan['ripe_date_triggers'])}; "
+                        f"stale candidates: {len(plan['stale_candidates'])}; "
+                        f"pattern candidates: {len(plan['pattern_candidates'])}"
+                    )
+            else:
+                assert apply_path is not None
+                plan = json.loads(apply_path.read_text(encoding="utf-8"))
+                result = heartbeat_ops.apply_heartbeat(root, idx, plan)
+                if result.skipped_run:
+                    click.echo(f"Heartbeat skipped: {result.skip_reason}")
+                else:
+                    click.echo(
+                        f"Applied: {result.ripe_promoted} ripe, "
+                        f"{result.stale_created} stale, "
+                        f"{result.pattern_created} pattern, "
+                        f"{result.skipped} skipped."
+                    )
+                    if result.log_path:
+                        click.echo(f"  log: {result.log_path.relative_to(root)}")
+    except PaceLockBusy as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
+# ---- followup group ----------------------------------------------------
+
+
+@main.group("followup")
+def followup_group() -> None:
+    """Manage proactive followups (v0.2 heartbeat inbox)."""
+
+
+@followup_group.command("add")
+@click.option(
+    "--trigger",
+    type=click.Choice(sorted(followup_ops.VALID_TRIGGERS)),
+    default="manual",
+    show_default=True,
+    help="When the followup becomes ready.",
+)
+@click.option(
+    "--when",
+    "trigger_value",
+    type=str,
+    default="",
+    help="ISO date for trigger=date (e.g. 2026-05-02), or free-form context for others.",
+)
+@click.option("--project", type=str, default=None)
+@click.option(
+    "--priority",
+    type=click.Choice(sorted(followup_ops.VALID_PRIORITIES)),
+    default="normal",
+    show_default=True,
+)
+@click.option("--tag", "tags", multiple=True)
+@click.argument("body", type=str)
+def followup_add(
+    trigger: str,
+    trigger_value: str,
+    project: str | None,
+    priority: str,
+    tags: tuple[str, ...],
+    body: str,
+) -> None:
+    """Create a new followup."""
+    root = require_vault_root()
+    try:
+        fu = followup_ops.add_followup(
+            root,
+            body=body,
+            trigger=trigger,
+            trigger_value=trigger_value,
+            project=project,
+            priority=priority,
+            tags=list(tags),
+        )
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"Created {fu.id} (status: {fu.status}, trigger: {fu.trigger}).")
+
+
+@followup_group.command("list")
+@click.option(
+    "--status",
+    type=click.Choice(sorted(followup_ops.VALID_STATUSES)),
+    default=None,
+    help="Filter by status. Default: all active (pending+ready).",
+)
+@click.option("--project", type=str, default=None)
+@click.option("--include-done", is_flag=True, help="Include resolved followups.")
+def followup_list(
+    status: str | None, project: str | None, include_done: bool
+) -> None:
+    """List followups."""
+    root = require_vault_root()
+    items = followup_ops.list_followups(
+        root, status=status, project=project, include_done=include_done
+    )
+    if not items:
+        click.echo("No followups.")
+        return
+    for fu in items:
+        proj = f"  ({fu.project})" if fu.project else ""
+        when = f"  [{fu.trigger}: {fu.trigger_value}]" if fu.trigger_value else f"  [{fu.trigger}]"
+        click.echo(f"{fu.id}  {fu.status:<9} {fu.priority:<6}{when}{proj}")
+        for line in fu.body.splitlines() or [""]:
+            click.echo(f"    {line}")
+        click.echo("")
+
+
+@followup_group.command("resolve")
+@click.argument("fu_id", type=str)
+@click.option(
+    "--status",
+    type=click.Choice(["done", "dismissed"]),
+    default="done",
+    show_default=True,
+)
+def followup_resolve(fu_id: str, status: str) -> None:
+    """Mark a followup done (or dismissed) — moves it under followups/done/."""
+    root = require_vault_root()
+    try:
+        fu = followup_ops.resolve_followup(root, fu_id, status=status)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+    if fu is None:
+        raise click.ClickException(f"No active followup with id {fu_id!r}.")
+    click.echo(f"Resolved {fu.id} ({fu.status}).")
 
 
 # ---- doctor ------------------------------------------------------------

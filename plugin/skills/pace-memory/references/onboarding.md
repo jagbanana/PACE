@@ -76,10 +76,36 @@ If the user declines, register both tasks anyway in a paused state (or
 note that the absence will be surfaced through future `pace_status`
 warnings). Don't push back.
 
+### Then ask about the optional proactive heartbeat
+
+> One more option: PACE has a **proactive heartbeat** that can check
+> in on you during your work hours — flagging stale commitments,
+> dated follow-ups coming due, and patterns it notices in your recent
+> work. It only surfaces things at the start of your next session
+> (it never interrupts), and it stays quiet when there's nothing
+> worth flagging. Want me to enable it? If yes, what hours and days
+> are you typically working? (Default: 9:00–17:00, Mon–Fri.)
+
+**If the user says yes:**
+
+1. Open `<vault>/system/pace_config.yaml`. Set `heartbeat.enabled:
+   true` and adjust `working_hours_start`, `working_hours_end`, and
+   `working_days` to match what they told you. (You can use Edit or
+   Write directly; the file is plain YAML.)
+2. Register a third scheduled task:
+   - **Heartbeat** — every 60 minutes. Read
+     `${CLAUDE_PLUGIN_ROOT}/system-prompts/heartbeat.md` and pass it
+     verbatim. The in-vault working-hours / cadence guard keeps this
+     honest even if Cowork's cron ticks more often.
+
+**If the user says no**, leave `heartbeat.enabled: false` and skip
+the third scheduled task. They can opt in later by editing the config
+and asking you to register the task.
+
 ## Beat 3 — Confirm + finish (one turn)
 
 > Done. Vault folder created at `<path>`, version control initialized,
-> both tasks scheduled. From here on, just talk to me normally — I'll
+> all tasks scheduled. From here on, just talk to me normally — I'll
 > handle remembering. What would you like to work on?
 
 End onboarding. Resume normal flow with the user's next message.

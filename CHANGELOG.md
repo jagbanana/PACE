@@ -4,6 +4,37 @@ All notable changes to PACE are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] — 2026-04-29
+
+### Added
+- **Proactive heartbeat (opt-in).** A new background scheduled task that
+  scans the vault during user-defined working hours and queues things
+  worth flagging into a `followups/` inbox surfaced at the next session
+  start. Three signals: ripe date triggers, stale commitments, and
+  repeated patterns (person mentions, recurring decisions).
+- **Followups memory tier.** New `followups/` directory holds proactive
+  inbox items as Markdown files with YAML frontmatter (`pending`,
+  `ready`, `done`, `dismissed`). Resolved items move to
+  `followups/done/`.
+- **New MCP tools:** `pace_add_followup`, `pace_list_followups`,
+  `pace_resolve_followup`. `pace_status` now returns an `inbox` field
+  with ready followups and a `last_heartbeat` timestamp.
+- **New CLI commands:** `pace heartbeat --plan / --apply`,
+  `pace followup add / list / resolve`.
+- **Heartbeat scheduled-task prompt** at `system/prompts/heartbeat.md`,
+  mirrored in the plugin under `system-prompts/heartbeat.md`.
+- **Onboarding gained an opt-in step** asking whether the user wants the
+  heartbeat enabled and what their working hours are. Defaults are
+  9:00–17:00, Mon–Fri.
+- **`pace_config.yaml` extended** with a `heartbeat:` section
+  (`enabled`, `working_hours_start/end`, `working_days`,
+  `cadence_minutes`, `stale_age_days`, `pattern_min_repeats`).
+
+### Changed
+- The session-start contract: when `pace_status.inbox` is non-empty, the
+  model briefly surfaces ready followups at the top of its first reply,
+  then resolves them as the user acts.
+
 ## [0.1.2] — 2026-04-29
 
 ### Added
@@ -58,6 +89,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - 160+ tests covering capture, search, compaction, review, doctor,
   MCP surface, plugin packaging, and onboarding artifacts.
 
+[0.2.0]: https://github.com/jagbanana/PACE/releases/tag/v0.2.0
 [0.1.2]: https://github.com/jagbanana/PACE/releases/tag/v0.1.2
 [0.1.1]: https://github.com/jagbanana/PACE/releases/tag/v0.1.1
 [0.1.0]: https://github.com/jagbanana/PACE/releases/tag/v0.1.0

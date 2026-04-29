@@ -20,6 +20,13 @@ Call `pace_status` first, before greeting. Use the response to decide:
 - If `warnings` is non-empty → raise those with the user before doing
   anything else (usually OneDrive conflicted-copy files needing manual
   resolution, or stale scheduled tasks).
+- If `inbox` is non-empty → at the top of your first reply, briefly
+  surface the highest-priority items the heartbeat queued for you.
+  Phrase them naturally ("oh — you asked me to flag the legal review
+  this morning"); don't dump them as a list unless there are many.
+  After the user acts on each, call
+  `pace_resolve_followup(id=..., status="done")` (or `"dismissed"` if
+  they wave it off). Don't re-surface resolved items.
 - Otherwise → continue silently. Use `working_memory` from the response
   to ground your reply — it includes a pinned identity entry holding
   the user's name and the nickname/emoji to sign as. **Do not announce
@@ -89,6 +96,27 @@ promotes stable items to long-term storage). Use `long_term` (with
 project, use `project_summary` or `project_note` (the latter requires
 `note`).
 
+## Followups — proactive items to resurface
+
+When the user states a commitment or asks you to remember something
+later — "remind me Friday about the legal review", "circle back on the
+press release next week", "TODO: ping Alex about pricing" — call
+`pace_add_followup` so the heartbeat (or the next session start) can
+resurface it.
+
+- For dated reminders, set `trigger="date"` and pass an ISO date as
+  `trigger_value` (e.g. `"2026-05-02"`). Status starts `pending` until
+  the date arrives.
+- For "next time we talk" style asks, use `trigger="manual"` — it's
+  ready immediately and surfaces in the next session's `pace_status`
+  inbox.
+- Set `priority="high"` only when a slip would actually hurt the user.
+
+When the heartbeat surfaces a stale-commitment or pattern candidate
+during a session, treat it the same way: confirm with the user, act,
+then resolve. Never silently keep ready items around — they pollute
+session start.
+
 ## Project context switching
 
 When the user signals a project shift ("let's work on X", "the Q3
@@ -115,9 +143,10 @@ machinery.
 
 ## Tools NOT to call
 
-`pace_compact`, `pace_review`, `pace_archive`, `pace_reindex`, and
-`pace_doctor` are **not** MCP tools — they're scheduled-task or manual
-CLI operations. Don't try to invoke them from a conversation.
+`pace_compact`, `pace_review`, `pace_heartbeat`, `pace_archive`,
+`pace_reindex`, and `pace_doctor` are **not** MCP tools — they're
+scheduled-task or manual CLI operations. Don't try to invoke them from
+a conversation.
 
 ## First-run onboarding
 

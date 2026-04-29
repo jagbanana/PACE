@@ -15,6 +15,17 @@ Schema (all optional; defaults baked into :class:`Settings`):
                           # returned body to fit if it ever exceeds
                           # this between scheduled compactions.
 
+    heartbeat:
+      enabled: false        # Opt-in. Onboarding asks; default off.
+      working_hours_start: "09:00"
+      working_hours_end:   "17:00"
+      working_days:        [mon, tue, wed, thu, fri]
+      cadence_minutes:     60          # gap enforced between runs
+      stale_age_days:      7           # commitment-shape entries older
+                                       # than this are stale candidates
+      pattern_min_repeats: 3           # how many similar captures to
+                                       # surface as a pattern candidate
+
 If the file is missing, defaults apply silently. If parsing fails (bad
 YAML, unexpected types), defaults apply and the error is swallowed —
 this is operational state read on every ``pace_status`` call, and we'd
@@ -23,7 +34,7 @@ rather degrade to defaults than crash session start.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -33,6 +44,16 @@ import yaml
 # for English prose and avoids pulling in a tokenizer dependency.
 DEFAULT_WORKING_MEMORY_SOFT_CHARS = 16_000   # ~4,000 tokens
 DEFAULT_WORKING_MEMORY_HARD_CHARS = 32_000   # ~8,000 tokens
+
+# Heartbeat defaults. Off by default — the feature only fires if the
+# user opted in during onboarding.
+DEFAULT_HEARTBEAT_ENABLED = False
+DEFAULT_WORKING_HOURS_START = "09:00"
+DEFAULT_WORKING_HOURS_END = "17:00"
+DEFAULT_WORKING_DAYS: tuple[str, ...] = ("mon", "tue", "wed", "thu", "fri")
+DEFAULT_HEARTBEAT_CADENCE_MIN = 60
+DEFAULT_STALE_AGE_DAYS = 7
+DEFAULT_PATTERN_MIN_REPEATS = 3
 
 # Path of the config file relative to the vault root.
 SETTINGS_FILE = "system/pace_config.yaml"
@@ -45,6 +66,14 @@ class Settings:
 
     working_memory_soft_chars: int = DEFAULT_WORKING_MEMORY_SOFT_CHARS
     working_memory_hard_chars: int = DEFAULT_WORKING_MEMORY_HARD_CHARS
+
+    heartbeat_enabled: bool = DEFAULT_HEARTBEAT_ENABLED
+    heartbeat_start: str = DEFAULT_WORKING_HOURS_START
+    heartbeat_end: str = DEFAULT_WORKING_HOURS_END
+    heartbeat_days: tuple[str, ...] = field(default=DEFAULT_WORKING_DAYS)
+    heartbeat_cadence_minutes: int = DEFAULT_HEARTBEAT_CADENCE_MIN
+    heartbeat_stale_age_days: int = DEFAULT_STALE_AGE_DAYS
+    heartbeat_pattern_min_repeats: int = DEFAULT_PATTERN_MIN_REPEATS
 
 
 def load(root: Path) -> Settings:
@@ -69,12 +98,35 @@ def load(root: Path) -> Settings:
     if not isinstance(wm, dict):
         wm = {}
 
+    hb = raw.get("heartbeat") or {}
+    if not isinstance(hb, dict):
+        hb = {}
+
     return Settings(
         working_memory_soft_chars=_coerce_int(
             wm.get("soft_chars"), DEFAULT_WORKING_MEMORY_SOFT_CHARS
         ),
         working_memory_hard_chars=_coerce_int(
             wm.get("hard_chars"), DEFAULT_WORKING_MEMORY_HARD_CHARS
+        ),
+        heartbeat_enabled=bool(hb.get("enabled", DEFAULT_HEARTBEAT_ENABLED)),
+        heartbeat_start=_coerce_hhmm(
+            hb.get("working_hours_start"), DEFAULT_WORKING_HOURS_START
+        ),
+        heartbeat_end=_coerce_hhmm(
+            hb.get("working_hours_end"), DEFAULT_WORKING_HOURS_END
+        ),
+        heartbeat_days=_coerce_days(
+            hb.get("working_days"), DEFAULT_WORKING_DAYS
+        ),
+        heartbeat_cadence_minutes=_coerce_int(
+            hb.get("cadence_minutes"), DEFAULT_HEARTBEAT_CADENCE_MIN
+        ),
+        heartbeat_stale_age_days=_coerce_int(
+            hb.get("stale_age_days"), DEFAULT_STALE_AGE_DAYS
+        ),
+        heartbeat_pattern_min_repeats=_coerce_int(
+            hb.get("pattern_min_repeats"), DEFAULT_PATTERN_MIN_REPEATS
         ),
     )
 
@@ -105,6 +157,42 @@ def _coerce_int(value: object, default: int) -> int:
     return result if result > 0 else default
 
 
+_VALID_DAYS: frozenset[str] = frozenset(
+    {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
+)
+
+
+def _coerce_days(value: object, default: tuple[str, ...]) -> tuple[str, ...]:
+    """Tolerant parser for the ``working_days`` list."""
+    if not isinstance(value, list):
+        return default
+    out = []
+    for item in value:
+        if not isinstance(item, str):
+            continue
+        norm = item.strip().lower()[:3]
+        if norm in _VALID_DAYS:
+            out.append(norm)
+    return tuple(out) if out else default
+
+
+def _coerce_hhmm(value: object, default: str) -> str:
+    """Validate an ``HH:MM`` 24-hour string; fall back to default on noise."""
+    if not isinstance(value, str):
+        return default
+    s = value.strip()
+    if len(s) != 5 or s[2] != ":":
+        return default
+    try:
+        h = int(s[:2])
+        m = int(s[3:])
+    except ValueError:
+        return default
+    if 0 <= h <= 23 and 0 <= m <= 59:
+        return s
+    return default
+
+
 _DEFAULT_YAML = """\
 # PACE vault settings. All values are optional; PACE falls back to
 # documented defaults if a key is missing or unparseable. Edit and save
@@ -124,4 +212,28 @@ working_memory:
   # searchable via pace_search. Default: 32,000 characters
   # (~8,000 tokens).
   hard_chars: 32000
+
+heartbeat:
+  # The proactive heartbeat checks for things to flag during your work
+  # hours. Disabled by default; onboarding asks if you want it on. When
+  # enabled, a scheduled task fires inside Cowork on the cadence below
+  # and writes any findings into followups/ as 'ready' inbox items the
+  # next session greets you with.
+  enabled: false
+
+  # Working hours (24-hour local time) and days. The heartbeat task
+  # bails immediately if it fires outside these — Cowork's cron may
+  # tick more often than this, but we don't act on it.
+  working_hours_start: "09:00"
+  working_hours_end:   "17:00"
+  working_days:        [mon, tue, wed, thu, fri]
+
+  # Minimum gap between two heartbeat runs. Even if Cowork's cron
+  # fires more often, the orchestrator skips runs inside this window.
+  cadence_minutes: 60
+
+  # Heuristic thresholds used when scanning for stale commitments and
+  # repeated patterns. See plugin docs for what these mean.
+  stale_age_days: 7
+  pattern_min_repeats: 3
 """

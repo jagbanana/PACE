@@ -36,6 +36,7 @@ from mcp.server.fastmcp import FastMCP
 
 from pace import doctor as doctor_ops
 from pace import entries as entries_mod
+from pace import followups as fu_ops
 from pace import projects as project_ops
 from pace import settings as pace_settings
 from pace import vault as vault_ops
@@ -146,7 +147,12 @@ def pace_status() -> dict[str, Any]:
         files            — counts by kind (working/long_term/...)
         last_compact     — ISO timestamp or null
         last_review      — ISO timestamp or null
+        last_heartbeat   — ISO timestamp or null
         working_memory   — body of memories/working_memory.md (or empty)
+        inbox            — list of ready followups to surface at the
+                           top of your first reply (highest priority
+                           first); empty list if none. Resolve via
+                           pace_resolve_followup once acted on.
         warnings         — list of human-readable issues to raise
 
     Example: ``pace_status()`` — no arguments.
@@ -159,7 +165,9 @@ def pace_status() -> dict[str, Any]:
             "files": {},
             "last_compact": None,
             "last_review": None,
+            "last_heartbeat": None,
             "working_memory": "",
+            "inbox": [],
             "warnings": [],
         }
 
@@ -170,11 +178,14 @@ def pace_status() -> dict[str, Any]:
         _, body = parse_frontmatter(wm_path.read_text(encoding="utf-8"))
         wm_body = _truncate_working_memory(body, settings.working_memory_hard_chars)
 
+    inbox = fu_ops.inbox_for_status(root)
+
     idx = _open_index(root)
     try:
         counts = idx.count_by_kind()
         last_compact = idx.get_config("last_compact")
         last_review = idx.get_config("last_review")
+        last_heartbeat = idx.get_config("last_heartbeat")
         # Source warnings from doctor so MCP and CLI never disagree about
         # which issues need surfacing.
         report = doctor_ops.run_all(root, idx)
@@ -187,7 +198,9 @@ def pace_status() -> dict[str, Any]:
         "files": counts,
         "last_compact": last_compact,
         "last_review": last_review,
+        "last_heartbeat": last_heartbeat,
         "working_memory": wm_body,
+        "inbox": inbox,
         "warnings": doctor_ops.report_to_warnings(report),
     }
 
@@ -437,6 +450,142 @@ def pace_create_project(
         "aliases": proj.aliases,
         "summary_path": proj.summary_relpath,
     }
+
+
+@mcp.tool()
+def pace_add_followup(
+    body: str,
+    trigger: str = "manual",
+    trigger_value: str = "",
+    project: str | None = None,
+    priority: str = "normal",
+    tags: list[str] | None = None,
+) -> dict[str, Any]:
+    """Queue a proactive item to resurface for the user later.
+
+    CALL THIS when the user states a commitment to follow up on, asks
+    you to remember to do something later, or describes a deadline you
+    should flag as it approaches. The heartbeat (if enabled) and the
+    next session's pace_status will surface ready items.
+
+    Arguments:
+        body          — what to surface to the user. Phrase it as a
+                        sentence you'd actually say ("the legal review
+                        is due Friday"), not as data.
+        trigger       — when this becomes ready. One of:
+                        - "date":   trigger_value is an ISO date
+                                    (YYYY-MM-DD); status starts pending.
+                        - "manual": ready immediately (default).
+                        - "stale" / "pattern": reserved for the
+                          heartbeat scanner; you generally won't pass
+                          these directly.
+        trigger_value — interpretation depends on trigger. Required
+                        for trigger="date".
+        project       — optional project name for grouping.
+        priority      — "low", "normal" (default), or "high".
+        tags          — optional list of #tags.
+
+    Returns: ``{"id", "status", "trigger"}`` on success, or ``{"error"}``.
+
+    Example: ``pace_add_followup(body="Remind me to circle back on the
+        legal review", trigger="date", trigger_value="2026-05-02",
+        priority="high")``
+    """
+    root = _initialized_root()
+    if root is None:
+        return _not_initialized_response()
+    try:
+        fu = fu_ops.add_followup(
+            root,
+            body=body,
+            trigger=trigger,
+            trigger_value=trigger_value,
+            project=project,
+            priority=priority,
+            tags=list(tags or []),
+        )
+    except ValueError as exc:
+        return {"error": str(exc)}
+    return {"id": fu.id, "status": fu.status, "trigger": fu.trigger}
+
+
+@mcp.tool()
+def pace_list_followups(
+    status: str | None = None,
+    project: str | None = None,
+    include_done: bool = False,
+) -> dict[str, Any]:
+    """List followups in the vault's inbox.
+
+    CALL THIS when the user asks "what am I forgetting?", "what do you
+    have queued for me?", or any similar inbox-y question. The session-
+    start `pace_status` already surfaces ready items, so during a
+    session you mainly need this for "show me the pending stuff" or
+    "what did I dismiss last week."
+
+    Arguments:
+        status       — filter to one of pending / ready / done /
+                       dismissed. Default: all active (pending+ready).
+        project      — restrict to one project's followups.
+        include_done — set true to include resolved items.
+
+    Returns: ``{"followups": [{"id", "status", "trigger",
+        "trigger_value", "project", "priority", "body"}]}``.
+
+    Example: ``pace_list_followups(status="ready")``
+    """
+    root = _initialized_root()
+    if root is None:
+        return _not_initialized_response()
+    items = fu_ops.list_followups(
+        root, status=status, project=project, include_done=include_done
+    )
+    return {
+        "followups": [
+            {
+                "id": fu.id,
+                "status": fu.status,
+                "trigger": fu.trigger,
+                "trigger_value": fu.trigger_value,
+                "project": fu.project,
+                "priority": fu.priority,
+                "body": fu.body,
+            }
+            for fu in items
+        ]
+    }
+
+
+@mcp.tool()
+def pace_resolve_followup(
+    id: str, status: str = "done"
+) -> dict[str, Any]:
+    """Mark a followup done (or dismissed) and move it out of the inbox.
+
+    CALL THIS once the user has acknowledged or acted on a followup you
+    surfaced. Don't leave ready items lingering — they pollute every
+    subsequent session start until resolved.
+
+    Arguments:
+        id     — the followup's id (returned in pace_status.inbox).
+        status — "done" (default) if the user acted on it, or
+                 "dismissed" if they waved it off.
+
+    Returns: ``{"id", "status"}`` on success, or ``{"error"}``.
+
+    Example: ``pace_resolve_followup(id="f-2026-05-02-091500-abc123",
+        status="done")``
+    """
+    root = _initialized_root()
+    if root is None:
+        return _not_initialized_response()
+    try:
+        fu = fu_ops.resolve_followup(root, id, status=status)
+    except ValueError as exc:
+        return {"error": str(exc)}
+    if fu is None:
+        return {"error": f"No active followup with id {id!r}."}
+    return {"id": fu.id, "status": fu.status}
 
 
 @mcp.tool()
