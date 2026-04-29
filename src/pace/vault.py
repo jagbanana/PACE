@@ -4,12 +4,15 @@ This module owns the rules for how a freshly-initialized vault looks on
 disk, and how to rebuild the SQLite index from disk content for the case
 where the user edited markdown files directly in Obsidian.
 
-Onboarding-specific concerns (CLAUDE.md template, ``.mcp.json``, scheduled
-tasks, ``git init``) live in Phase 4 and are layered on top of ``init``.
+Phase 3 added ``.mcp.json`` generation here so the MCP server is wired
+up on the very first ``pace init``. Phase 4 will layer the CLAUDE.md
+template, scheduled-task registration, and ``git init`` on top.
 """
 
 from __future__ import annotations
 
+import json
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -45,11 +48,33 @@ system/pace_index.db-shm
 system/.pace.lock
 system/logs/
 
+# .mcp.json embeds the local Python path; machine-specific.
+.mcp.json
+
 # OneDrive sync residue
 *.tmp
 ~$*
 * (Conflicted Copy *).md
 """
+
+
+def _build_mcp_config(root: Path) -> dict:
+    """Construct the ``.mcp.json`` payload for this vault.
+
+    Uses the *current* Python interpreter so the registered server is
+    guaranteed to have ``pace`` importable. Sets ``PACE_ROOT`` so the
+    server resolves the right vault even when Cowork launches it from
+    a different cwd.
+    """
+    return {
+        "mcpServers": {
+            "pace": {
+                "command": sys.executable,
+                "args": ["-m", "pace.mcp_server"],
+                "env": {"PACE_ROOT": str(root)},
+            }
+        }
+    }
 
 
 @dataclass(frozen=True)
@@ -110,6 +135,13 @@ def init(root: Path) -> InitResult:
     if not gitignore.exists():
         atomic_write_text(gitignore, VAULT_GITIGNORE)
         created_files.append(".gitignore")
+
+    # .mcp.json ---------------------------------------------------------
+    mcp_config_path = root / ".mcp.json"
+    if not mcp_config_path.exists():
+        payload = json.dumps(_build_mcp_config(root), indent=2) + "\n"
+        atomic_write_text(mcp_config_path, payload)
+        created_files.append(".mcp.json")
 
     # If we just created the working_memory file, register it in the
     # freshly-built index so the first ``pace status`` reflects reality.

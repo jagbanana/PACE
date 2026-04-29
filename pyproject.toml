@@ -42,6 +42,7 @@ dev = [
 
 [project.scripts]
 pace = "pace.cli:main"
+pace-mcp = "pace.mcp_server:main"
 
 [project.urls]
 Homepage = "https://github.com/justingesso/pace"
