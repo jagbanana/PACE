@@ -7,4 +7,4 @@ See PACE PRD.md and PACE Dev Plan.md at the repository root for the
 full design and roadmap.
 """
 
-__version__ = "0.0.1"
+__version__ = "0.1.0"

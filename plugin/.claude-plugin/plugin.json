@@ -1,0 +1,19 @@
+{
+  "name": "pace-memory",
+  "version": "0.1.0",
+  "description": "Persistent AI Context Engine — local Markdown memory for Claude. Remembers people, decisions, and project context across sessions in a human-readable vault.",
+  "author": {
+    "name": "Justin Gesso"
+  },
+  "homepage": "https://github.com/justingesso/pace",
+  "license": "MIT",
+  "keywords": ["memory", "vault", "obsidian", "markdown", "context"],
+  "userConfig": {
+    "vaultRoot": {
+      "type": "string",
+      "description": "Absolute path to your PACE vault folder. Optional — leave blank to let onboarding pick a location on first use. Example: C:\\Users\\you\\Documents\\my-pace-vault",
+      "default": "",
+      "envVar": "VAULT_ROOT"
+    }
+  }
+}

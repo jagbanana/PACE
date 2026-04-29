@@ -17,6 +17,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from pace import config as pace_config
 from pace import frontmatter, wikilinks
 from pace.index import Index, now_iso
 from pace.io import atomic_write_text
@@ -96,6 +97,7 @@ class InitResult:
     created_files: list[str]
     already_initialized: bool
     git_initialized: bool = False
+    user_config_path: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -184,6 +186,13 @@ def init(root: Path) -> InitResult:
     # Git --------------------------------------------------------------
     git_initialized = _maybe_git_init(root)
 
+    # Per-user config --------------------------------------------------
+    # Record the vault location so the plugin-launched MCP server can
+    # find this folder on subsequent starts without an env var. Same
+    # write happens whether init was called from the CLI or the
+    # pace_init MCP tool.
+    user_config_path = pace_config.set_vault_root(root)
+
     # If we just created the working_memory file, register it in the
     # freshly-built index so the first ``pace status`` reflects reality.
     if WORKING_MEMORY in created_files:
@@ -209,6 +218,7 @@ def init(root: Path) -> InitResult:
         created_files=created_files,
         already_initialized=already,
         git_initialized=git_initialized,
+        user_config_path=user_config_path,
     )
 
 

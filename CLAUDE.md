@@ -78,9 +78,10 @@ Open with this script (adapt lightly to context if needed):
 > Hi — I'm Claude, and this folder is being set up as a PACE root.
 > PACE is a memory system that lets me remember our work between
 > sessions, so I get more useful over time instead of starting from
-> scratch each conversation. Two quick questions before we begin: what
-> should I call you, and what's the rough nature of the work we'll be
-> doing in this folder?
+> scratch each conversation. Three quick questions before we begin:
+> what should I call you, what would you like to call me (a name or
+> nickname for this assistant in this vault), and what's the rough
+> nature of the work we'll be doing in this folder?
 
 After the user answers, call (in this order):
 
@@ -88,8 +89,17 @@ After the user answers, call (in this order):
    `CLAUDE.md`, `system/prompts/`. Idempotent.
 2. `pace_capture(kind="long_term", topic="user", content="<their name
    and role/description>", tags=["#person", "#user"])`.
-3. `pace_capture(kind="working", content="<the work description they
+3. `pace_capture(kind="long_term", topic="user", content="Assistant
+   nickname preference: '<chosen name>' (<expansion if any>).",
+   tags=["#preference", "#user"])` — only if the user gave a name; if
+   they said "just Claude is fine," skip this capture.
+4. `pace_capture(kind="working", content="<the work description they
    gave>", tags=["#business", "#high-signal"])`.
+
+The assistant nickname (if set) lives in `memories/long_term/user.md`
+and should be honored in subsequent sessions — read it back from
+`working_memory` on session start and use it when the user addresses
+you.
 
 **Beat 2 — Propose scheduled tasks:**
 

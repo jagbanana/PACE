@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "pace": {
+      "command": "uvx",
+      "args": ["--from", "pace-memory", "pace-mcp"],
+      "env": {}
+    }
+  }
+}

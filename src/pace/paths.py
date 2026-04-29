@@ -1,11 +1,15 @@
 """Vault path resolution.
 
 A *vault* is a directory containing the runtime PACE structure
-(``memories/``, ``projects/``, ``system/``). The vault root is found by:
+(``memories/``, ``projects/``, ``system/``). The vault root is found by
+the following resolution chain (first hit wins):
 
-1. The ``PACE_ROOT`` environment variable, if set.
-2. Walking up from the current working directory looking for
-   ``system/pace_index.db``.
+1. ``PACE_ROOT`` env var (handled by :func:`pace.config.resolve_vault_root`).
+2. ``CLAUDE_PLUGIN_OPTION_VAULT_ROOT`` env var (set by Cowork when the
+   plugin's userConfig is filled at install time).
+3. The per-user config file written by ``pace init``.
+4. Walking up from the current working directory looking for
+   ``system/pace_index.db`` (legacy / Claude-Code workflow).
 
 For ``pace init`` (which creates a new vault) the caller passes the
 target directory explicitly — vault detection isn't used.
@@ -13,8 +17,9 @@ target directory explicitly — vault detection isn't used.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
+
+from pace import config as pace_config
 
 
 class VaultNotFoundError(RuntimeError):
@@ -34,19 +39,23 @@ PROJECTS_DIR = "projects"
 
 
 def find_vault_root(start: Path | None = None) -> Path | None:
-    """Return the vault root containing ``start``, or ``None`` if not found.
+    """Return the vault root for the current process, or ``None``.
 
-    Resolution order: ``PACE_ROOT`` env var → walk up from ``start`` (or cwd)
-    looking for ``system/pace_index.db``.
+    Resolution order:
+
+    1. If :func:`pace.config.resolve_vault_root` returns a path — meaning
+       the user/admin has explicitly designated a vault via env var or
+       config file — that's the authoritative answer. Return it iff it
+       points at an initialized vault; never silently fall through to a
+       different folder when an explicit override is set.
+    2. Walk up from ``start`` (or cwd) looking for
+       ``system/pace_index.db``. Used only when there's no explicit
+       override — preserves the original Claude-Code workflow where the
+       user opens the vault folder directly.
     """
-    env = os.environ.get("PACE_ROOT")
-    if env:
-        candidate = Path(env).expanduser().resolve()
-        if (candidate / INDEX_DB).is_file():
-            return candidate
-        # PACE_ROOT pointing at an uninitialized dir is still a useful answer
-        # for `pace init`, but for command resolution we report not-found.
-        return None
+    explicit = pace_config.resolve_vault_root()
+    if explicit is not None:
+        return explicit if (explicit / INDEX_DB).is_file() else None
 
     cur = (start or Path.cwd()).resolve()
     for path in [cur, *cur.parents]:
