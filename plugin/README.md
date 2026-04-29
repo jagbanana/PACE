@@ -33,23 +33,126 @@ uv --version
 
 ## Install
 
-1. Download the latest `pace-memory.plugin` (a zip file) from the
-   [PACE releases page](https://github.com/justingesso/pace/releases).
-2. In Cowork, open the **Plugins** UI and choose *Install from file*
-   (or drag the `.plugin` onto the Plugins window).
-3. Cowork prompts for the plugin's `userConfig` values:
-   - **`vaultRoot`** *(optional)* — absolute path to the folder you
-     want PACE to use as its vault. Examples:
-     - Windows: `C:\Users\you\Documents\my-pace-vault`
-     - macOS / Linux: `/home/you/Documents/my-pace-vault`
+> **Important — Cowork and Claude Code use separate plugin systems
+> inside the Claude Desktop app.** A plugin installed via the desktop
+> app's *Settings → Customize* screen lands in Claude Code's plugin
+> store and **does not appear in Cowork**, even though both are the
+> same app. Cowork has its own marketplace under your active
+> Cowork session directory, and a plugin must be installed there
+> specifically to show up in Cowork sessions.
 
-     **Leave blank to let onboarding pick a path on first use.** You
-     can change this later from Cowork's plugin settings.
-4. Enable the plugin. Cowork spawns the bundled MCP server via
-   `uvx`. The first launch takes a few seconds while `uv` resolves
-   the server's dependencies (`click`, `mcp`, `pyyaml`,
-   `portalocker`, `python-dateutil`); subsequent launches are
-   instant — the resolved environment is cached.
+### Step 1 — Get the `.plugin` file
+
+Download the latest `pace-memory.plugin` from the
+[PACE releases page](https://github.com/justingesso/pace/releases),
+or build it from the source repo (`python scripts/build_plugin.py`).
+The result is a zip with the file extension `.plugin`.
+
+### Step 2 — Try Cowork's UI first
+
+If Cowork exposes an *Install plugin from file* (or *Upload plugin*)
+option in its own panel — distinct from the desktop app's
+*Settings → Customize* — use that and skip to **Step 6**. If your
+Cowork install doesn't have such a UI, or it deposits the plugin in
+Claude Code's location instead of Cowork's, fall through to Step 3.
+
+### Step 3 — Locate your Cowork marketplace folder
+
+Cowork stores its plugins under your active session directory.
+Open File Explorer to:
+
+```
+%APPDATA%\Claude\local-agent-mode-sessions\
+```
+
+Navigate into the most recently-modified subfolder, then again into
+the most recently-modified subfolder inside that. You should land in
+a directory containing `cowork_plugins\`. Continue into:
+
+```
+cowork_plugins\marketplaces\local-desktop-app-uploads\
+```
+
+That's where local plugins go. The folder should already contain a
+`.claude-plugin\marketplace.json` describing the local marketplace.
+
+### Step 4 — Extract the `.plugin` into a subfolder
+
+The marketplace expects each plugin as an extracted directory, **not
+a zip**. Right-click `pace-memory.plugin` in File Explorer, choose
+*Extract All*, and extract into the marketplace folder. Rename the
+resulting directory to `pace-memory` so the layout is:
+
+```
+local-desktop-app-uploads\
+├── .claude-plugin\
+│   └── marketplace.json
+└── pace-memory\
+    ├── .claude-plugin\plugin.json
+    ├── .mcp.json
+    ├── server\        ← bundled Python source
+    ├── skills\pace-memory\
+    └── system-prompts\
+```
+
+> **Don't extract using Python's `zipfile.extractall` from a script
+> on Windows.** The Cowork session path nests two UUIDs deep; combined
+> with the plugin's internal nesting you can blow past Windows
+> MAX_PATH (260 chars) and `extractall` fails with `FileNotFoundError`
+> *while creating files*. Windows' built-in *Extract All* handles long
+> paths correctly. So does Git Bash's `unzip` and 7-Zip.
+
+### Step 5 — Register the plugin in the marketplace manifest
+
+Open `local-desktop-app-uploads\.claude-plugin\marketplace.json` in
+any text editor. Add an entry to the `plugins` array (replace `[]` if
+that's what's there):
+
+```json
+{
+  "name": "local-desktop-app-uploads",
+  "version": "1.0.0",
+  "description": "Locally uploaded plugins via Claude Desktop app",
+  "owner": { "name": "Local User" },
+  "plugins": [
+    {
+      "name": "pace-memory",
+      "source": "./pace-memory",
+      "description": "Persistent AI Context Engine — local Markdown memory for Claude. Remembers people, decisions, and project context across sessions in a human-readable vault."
+    }
+  ]
+}
+```
+
+If the marketplace already lists other local plugins, just append the
+`pace-memory` entry to the `plugins` array.
+
+### Step 6 — Restart Cowork
+
+Fully quit Cowork. On Windows: open Task Manager, end every `Claude.exe`
+/ `Cowork.exe` process (some persist as a tray icon after the window
+closes), then relaunch. On startup Cowork rescans marketplaces and
+discovers `pace-memory`.
+
+### Step 7 — Enable the plugin in Cowork's UI
+
+In Cowork's plugin / customize panel, find `pace-memory` listed
+under the local-desktop-app-uploads marketplace and toggle it on.
+Cowork prompts for the plugin's `userConfig` values:
+
+- **`vaultRoot`** *(optional)* — absolute path to the folder you
+  want PACE to use as its vault. Examples:
+  - Windows: `C:\Users\you\Documents\my-pace-vault`
+  - macOS / Linux: `/home/you/Documents/my-pace-vault`
+
+  **Leave blank to let onboarding pick a path on first use.** You
+  can change this later from Cowork's plugin settings.
+
+After enabling, Cowork spawns the bundled MCP server via `uvx`. The
+first launch takes a few seconds while `uv` resolves the server's
+dependencies (`click`, `mcp`, `pyyaml`, `portalocker`,
+`python-dateutil`); subsequent launches are instant — the resolved
+environment is cached.
 
 The plugin **bundles its own Python source** (under `server/` inside
 the zip), so it doesn't need to download anything from PyPI to start.
@@ -158,11 +261,57 @@ edits live inside Cowork's task definitions.
 
 ## Troubleshooting
 
-### "Tools don't appear after install"
+### "Tools don't appear after install" — most common cause
 
-The bundled MCP server failed to start. Confirm `uv` is on PATH;
-restart Cowork after installing `uv`. Check Cowork's plugin logs for a
-`pace` server error.
+The plugin probably landed in Claude Code's plugin store rather than
+Cowork's marketplace. They look like the same install button, but
+they're separate stores under the hood. Check:
+
+```
+%APPDATA%\Claude\local-agent-mode-sessions\<session>\<session>\cowork_plugins\installed_plugins.json
+```
+
+If `"plugins"` is `{}`, Cowork has *zero* plugins enabled — the
+install went to the wrong place. Walk through the Step 3–7 install
+procedure above to put it in Cowork's marketplace and enable it.
+
+You can also check whether `pace-memory` made it into Cowork's
+marketplace by looking at:
+
+```
+%APPDATA%\Claude\local-agent-mode-sessions\<session>\<session>\cowork_plugins\marketplaces\local-desktop-app-uploads\
+```
+
+If there's no `pace-memory\` subdirectory or the directory is missing
+the `server\`, `skills\`, or `system-prompts\` folders, the
+extraction wasn't complete (often a Windows long-path issue — see
+next entry).
+
+### Extraction failed with `FileNotFoundError` or "Path too long"
+
+You hit Windows' MAX_PATH (260-char) limit while extracting the
+plugin. The Cowork session directory contains two UUIDs that already
+eat ~80 chars; combined with the plugin's internal `skills\pace-memory\references\onboarding.md`
+nesting, some files blow past the limit. Solutions, in order of
+preference:
+
+1. **Use Windows' built-in *Extract All*** (right-click the `.plugin`
+   file). It handles long paths via the `\\?\` prefix internally.
+2. **Use Git Bash's `unzip`** — it works fine on long paths.
+3. **Use 7-Zip** if you have it installed.
+4. **Avoid Python's `zipfile.extractall`** from scripts — it does
+   *not* automatically opt into long-path mode on Windows.
+
+### "Tools don't appear" but `installed_plugins.json` shows pace-memory
+
+The MCP server itself failed to start. Confirm:
+
+- `uv --version` succeeds in PowerShell.
+- After installing `uv`, you fully quit Cowork (including tray
+  processes via Task Manager) and relaunched. Cowork inherits PATH
+  at launch time, so a half-restart misses the new `uv`.
+- The first launch needs network access to `https://pypi.org` so
+  `uv` can fetch the runtime deps. Subsequent launches use the cache.
 
 ### "OneDrive marked vault files as online-only"
 

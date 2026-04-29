@@ -18,13 +18,19 @@ This is the supported path for almost everyone. Cowork doesn't load project-scop
 
 The plugin **bundles the PACE Python source inside its zip**. Nothing is fetched from PyPI to make the plugin work — `uvx` just runs the bundled source. The only thing fetched at install time is the small set of runtime dependencies (`click`, `mcp`, `pyyaml`, `portalocker`, `python-dateutil`), and `uv` caches them.
 
-1. Install [`uv`](https://docs.astral.sh/uv/) — the plugin uses `uvx` to launch the bundled PACE source in an isolated environment, so you don't manage Python yourself. Restart Cowork after installing `uv` so the new `PATH` propagates.
-2. Download `pace-memory.plugin` from the [releases page](https://github.com/justingesso/pace/releases) (or build it from source — see [Building the plugin](#building-the-plugin) below).
-3. In Cowork, open the **Plugins** UI and install `pace-memory.plugin` (drag onto the window or use *Install from file*).
-4. Cowork prompts for plugin config. The only field is `vaultRoot` — leave it blank and onboarding will pick a path on first use, or fill in an absolute path now.
-5. Open Cowork in any folder and start a conversation. The bundled skill detects an uninitialized vault and runs a short three-question onboarding (your name, optional assistant nickname, where to put the vault and what kind of work you're doing). After that, just talk.
+> **Heads up — Cowork and Claude Code share the desktop app but use *separate* plugin stores.** A plugin installed via the desktop app's *Settings → Customize* screen lands in Claude Code's store and **does not appear in Cowork**. Cowork has its own marketplace folder under your Cowork session directory, and a plugin must be extracted there specifically. The full flow is in [`plugin/README.md`](plugin/README.md); the short version is below.
 
-Full plugin docs: [`plugin/README.md`](plugin/README.md).
+1. Install [`uv`](https://docs.astral.sh/uv/). Restart Cowork (full quit, including tray processes) so the new `PATH` propagates.
+2. Download `pace-memory.plugin` from the [releases page](https://github.com/justingesso/pace/releases) (or build it from source — see [Building the plugin](#building-the-plugin) below).
+3. **Extract** the `.plugin` zip into Cowork's local-uploads marketplace. Use Windows' built-in *Extract All*, Git Bash's `unzip`, or 7-Zip — *not* Python's `zipfile.extractall`, which trips over Windows MAX_PATH (260 chars) given Cowork's deep session paths. Target:
+   ```
+   %APPDATA%\Claude\local-agent-mode-sessions\<session>\<session>\cowork_plugins\marketplaces\local-desktop-app-uploads\pace-memory\
+   ```
+4. **Register** the plugin in that marketplace's `marketplace.json` by adding a `{ "name": "pace-memory", "source": "./pace-memory", "description": "..." }` entry to the `plugins` array. Full example in [`plugin/README.md`](plugin/README.md#step-5--register-the-plugin-in-the-marketplace-manifest).
+5. **Restart Cowork**, open its plugin/customize panel, find `pace-memory` listed, and enable it. Cowork prompts for the optional `vaultRoot` field — leave blank to let onboarding pick a path.
+6. Open Cowork in any folder and start a conversation. The bundled skill detects an uninitialized vault and runs a short three-question onboarding (your name, optional assistant nickname, where to put the vault and what kind of work you're doing). After that, just talk.
+
+Full plugin docs (including the long-path / extraction gotcha and how to verify the install landed in the right store): [`plugin/README.md`](plugin/README.md).
 
 ### Claude Code → install the package and use the CLI
 
@@ -116,7 +122,13 @@ Runtime vault directories (`memories/`, `projects/`, `system/`) are created by `
 
 ### Cowork doesn't list `pace_*` tools after installing the plugin
 
-`uv` is missing or wasn't on Cowork's `PATH` when it started. Install `uv`, restart Cowork, and re-enable the plugin. Run `uvx --from pace-memory pace-mcp --help` in a terminal to verify the package is reachable from PyPI.
+Most common cause: the plugin landed in **Claude Code's** plugin store rather than Cowork's marketplace. Both UIs live inside the same desktop app and look similar, but they're separate stores. Check `%APPDATA%\Claude\local-agent-mode-sessions\<session>\<session>\cowork_plugins\installed_plugins.json` — if `"plugins"` is `{}`, Cowork has no plugins enabled and the install went to the wrong place. Follow the Cowork install steps above (extract into the local-uploads marketplace, register in `marketplace.json`, restart, enable in Cowork's panel).
+
+If `installed_plugins.json` *does* show `pace-memory` and the tools still don't appear, then `uv` is the issue: confirm `uv --version` works in PowerShell, then fully quit Cowork (including tray processes via Task Manager) and relaunch.
+
+### Extraction failed with `FileNotFoundError` or "Path too long"
+
+Windows MAX_PATH (260-char) limit. Cowork's session directory contains two UUIDs that already eat ~80 characters; combined with the plugin's internal `skills\pace-memory\references\onboarding.md` nesting, some files blow past the limit. Use Windows' built-in *Extract All*, Git Bash's `unzip`, or 7-Zip — they all opt into long-path mode. Python's `zipfile.extractall` does *not*.
 
 ### Claude Code doesn't list `pace_*` tools
 
