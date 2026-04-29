@@ -199,3 +199,109 @@ def test_apply_rejects_wrong_plan_kind(vault: Path, index: Index) -> None:
 
     with pytest.raises(ValueError):
         compact_ops.apply_compaction(vault, index, {"kind": "review_plan"})
+
+
+# ---- Force-promotion (working-memory size enforcement) ---------------
+
+
+def _write_tight_settings(vault: Path, soft: int, hard: int) -> None:
+    """Write a pace_config.yaml that makes the soft cap easy to trip."""
+    cfg = vault / "system" / "pace_config.yaml"
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    cfg.write_text(
+        f"working_memory:\n  soft_chars: {soft}\n  hard_chars: {hard}\n",
+        encoding="utf-8",
+    )
+
+
+def test_apply_force_promotes_when_over_soft_cap(vault: Path, index: Index) -> None:
+    """If working memory is still over the soft cap after the LLM's
+    decisions are applied, the apply step force-promotes oldest entries
+    to long_term/working-overflow.md until the body fits."""
+    _write_tight_settings(vault, soft=300, hard=1000)
+    now = datetime(2026, 4, 27, 10, 0, 0)
+
+    # Write 5 entries, oldest first; each ~120 chars so 5 entries blow
+    # past a 300-char soft cap.
+    for i in range(5):
+        when = now - timedelta(days=10 + i)
+        _write_working_entry(
+            vault,
+            when=when,
+            tags=["#fact"],
+            content=f"Entry {i}: padding text padding text padding text padding text.",
+        )
+
+    plan = compact_ops.plan_compaction(vault, index, now=now)
+    # Skip every candidate so the LLM doesn't trigger normal promotions.
+    for cand in plan["candidates"]:
+        cand["decision"] = "skip"
+
+    result = compact_ops.apply_compaction(vault, index, plan)
+
+    assert result.overflow_promoted >= 1, (
+        f"Expected force-promotion when body exceeds soft cap, "
+        f"got overflow_promoted={result.overflow_promoted}"
+    )
+
+    overflow = vault / LONG_TERM_DIR / "working-overflow.md"
+    assert overflow.is_file(), "force-promoted entries should land in working-overflow.md"
+
+    # Working memory body should now fit under the soft cap.
+    from pace import frontmatter as fm_mod
+    wm_text = (vault / WORKING_MEMORY).read_text(encoding="utf-8")
+    _, wm_body = fm_mod.parse(wm_text)
+    assert len(wm_body) <= 300, (
+        f"Body still over soft cap after apply: {len(wm_body)} chars"
+    )
+
+
+def test_apply_does_not_force_promote_when_under_soft_cap(
+    vault: Path, index: Index
+) -> None:
+    """Normal-sized working memory shouldn't trigger overflow logic."""
+    _write_tight_settings(vault, soft=10_000, hard=20_000)
+    now = datetime(2026, 4, 27, 10, 0, 0)
+    _write_working_entry(
+        vault,
+        when=now - timedelta(days=2),
+        tags=["#fact"],
+        content="A small note.",
+    )
+
+    plan = compact_ops.plan_compaction(vault, index, now=now)
+    for cand in plan["candidates"]:
+        cand["decision"] = "skip"
+    result = compact_ops.apply_compaction(vault, index, plan)
+
+    assert result.overflow_promoted == 0
+    assert not (vault / LONG_TERM_DIR / "working-overflow.md").exists()
+
+
+def test_apply_force_promotion_keeps_newest_entries(vault: Path, index: Index) -> None:
+    """Force-promotion sorts oldest-first; newest entries must survive."""
+    _write_tight_settings(vault, soft=200, hard=800)
+    now = datetime(2026, 4, 27, 10, 0, 0)
+
+    headings = []
+    for i in range(4):
+        when = now - timedelta(days=10 + i)
+        h = _write_working_entry(
+            vault,
+            when=when,
+            tags=["#fact"],
+            content=f"Entry {i}: padding padding padding padding padding.",
+        )
+        headings.append(h)
+
+    plan = compact_ops.plan_compaction(vault, index, now=now)
+    for cand in plan["candidates"]:
+        cand["decision"] = "skip"
+    compact_ops.apply_compaction(vault, index, plan)
+
+    wm_text = (vault / WORKING_MEMORY).read_text(encoding="utf-8")
+    # The very newest entry (i=0, 10 days ago) is the most recent in
+    # this fixture; it should survive over the older ones.
+    assert "Entry 0" in wm_text
+    # The oldest (i=3, 13 days ago) should have been pushed to overflow.
+    assert "Entry 3" not in wm_text

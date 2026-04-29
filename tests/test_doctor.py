@@ -258,3 +258,56 @@ def test_onedrive_check_clean_on_local_dir(vault: Path) -> None:
     """Tmpdirs aren't OneDrive-virtualized, so this should always pass."""
     issues = doctor_ops.check_onedrive_virtualized(vault)
     assert issues == []
+
+
+# ---- Working-memory size check ---------------------------------------
+
+
+def _settings_with_caps(soft: int, hard: int):
+    """Build a Settings object directly so the test isn't coupled to
+    the yaml loader path."""
+    from pace.settings import Settings
+
+    return Settings(working_memory_soft_chars=soft, working_memory_hard_chars=hard)
+
+
+def test_working_memory_size_clean_under_soft(vault: Path) -> None:
+    """Tiny vault, generous caps → no warning."""
+    settings = _settings_with_caps(soft=10_000, hard=20_000)
+    issues = doctor_ops.check_working_memory_size(vault, settings)
+    assert issues == []
+
+
+def test_working_memory_size_warns_over_soft(vault: Path) -> None:
+    """Body exceeds soft cap but not hard cap → warning."""
+    from pace import frontmatter as fm_mod
+
+    wm = vault / WORKING_MEMORY
+    fm, _ = fm_mod.parse(wm.read_text(encoding="utf-8"))
+    big_body = "## 2026-01-01 00:00\n\n" + ("padding " * 100)  # ~800 chars
+    wm.write_text(fm_mod.dump(fm, big_body), encoding="utf-8")
+
+    settings = _settings_with_caps(soft=200, hard=2_000)
+    issues = doctor_ops.check_working_memory_size(vault, settings)
+    assert len(issues) == 1
+    assert issues[0].code == "working-memory-oversize"
+    assert issues[0].severity == "warning"
+
+
+def test_working_memory_size_errors_over_hard(vault: Path) -> None:
+    """Body exceeds hard cap → error (not just warning), with detail
+    explaining that pace_status will truncate."""
+    from pace import frontmatter as fm_mod
+
+    wm = vault / WORKING_MEMORY
+    fm, _ = fm_mod.parse(wm.read_text(encoding="utf-8"))
+    very_big_body = "## 2026-01-01 00:00\n\n" + ("padding " * 200)
+    wm.write_text(fm_mod.dump(fm, very_big_body), encoding="utf-8")
+
+    settings = _settings_with_caps(soft=200, hard=400)
+    issues = doctor_ops.check_working_memory_size(vault, settings)
+    assert len(issues) == 1
+    assert issues[0].code == "working-memory-oversize"
+    assert issues[0].severity == "error"
+    assert issues[0].detail is not None
+    assert "truncates" in issues[0].detail.lower()

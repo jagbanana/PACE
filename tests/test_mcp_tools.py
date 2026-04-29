@@ -189,3 +189,45 @@ def test_init_is_idempotent(mcp_vault: Path) -> None:
     assert second["already_initialized"] is True
     assert second["created_dirs"] == []
     assert second["created_files"] == []
+
+
+# ---- Working-memory hard-cap truncation in pace_status ---------------
+
+
+def test_status_truncates_working_memory_over_hard_cap(mcp_vault: Path) -> None:
+    """If the working-memory body exceeds the configured hard_chars,
+    pace_status returns the most recent entries that fit plus a notice
+    so the model can still reach older content via pace_search."""
+    # Tighten the cap so the test is fast; defaults are 16K/32K.
+    cfg = mcp_vault / "system" / "pace_config.yaml"
+    cfg.write_text(
+        "working_memory:\n  soft_chars: 200\n  hard_chars: 400\n",
+        encoding="utf-8",
+    )
+
+    # Capture several beefy entries; total body will exceed 400 chars.
+    for i in range(6):
+        pace_capture(
+            kind="working",
+            content=(
+                f"Entry {i}: " + "padding " * 12  # ~100 chars per entry
+            ),
+        )
+
+    result = pace_status()
+    assert result["initialized"] is True
+    body = result["working_memory"]
+    assert len(body) <= 400 + 200  # within hard cap + notice slack
+    assert "older entries elided" in body
+    # Most recent capture should still be present (newest-first kept).
+    assert "Entry 5" in body
+    # Oldest capture should be elided.
+    assert "Entry 0" not in body
+
+
+def test_status_does_not_truncate_when_under_hard_cap(mcp_vault: Path) -> None:
+    pace_capture(kind="working", content="Just one short entry.")
+    result = pace_status()
+    body = result["working_memory"]
+    assert "Just one short entry." in body
+    assert "older entries elided" not in body

@@ -1,6 +1,6 @@
 {
   "name": "pace-memory",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Persistent AI Context Engine — local Markdown memory for Claude. Remembers people, decisions, and project context across sessions in a human-readable vault.",
   "author": {
     "name": "Justin Gesso"

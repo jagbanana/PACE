@@ -280,7 +280,8 @@ def compact(plan_mode: bool, apply_path: Path | None, out_path: Path | None) -> 
                 result = compact_ops.apply_compaction(root, idx, plan)
                 click.echo(
                     f"Applied: {result.promoted} promoted, "
-                    f"{result.skipped} skipped."
+                    f"{result.skipped} skipped, "
+                    f"{result.overflow_promoted} overflow."
                 )
                 if result.log_path:
                     click.echo(f"  log: {result.log_path.relative_to(root)}")

@@ -34,6 +34,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from pace import frontmatter, wikilinks
+from pace import settings as pace_settings
 from pace.index import Index
 from pace.paths import INDEX_DB, WORKING_MEMORY
 
@@ -96,6 +97,7 @@ class HealthReport:
 def run_all(root: Path, index: Index, *, now: datetime | None = None) -> HealthReport:
     """Run every check against ``root``/``index`` and return a report."""
     now = now or datetime.now()
+    settings = pace_settings.load(root)
     issues: list[HealthIssue] = []
     issues.extend(check_onedrive_virtualized(root))
     issues.extend(check_db_integrity(index))
@@ -103,6 +105,7 @@ def run_all(root: Path, index: Index, *, now: datetime | None = None) -> HealthR
     issues.extend(check_broken_wikilinks(root, index))
     issues.extend(check_conflicted_copies(root))
     issues.extend(check_scheduled_task_freshness(index, now=now))
+    issues.extend(check_working_memory_size(root, settings))
     return HealthReport(root=root.resolve(), issues=issues)
 
 
@@ -375,6 +378,57 @@ def _vault_age(index: Index, *, now: datetime) -> timedelta | None:
     except (TypeError, ValueError):
         return None
     return now - created
+
+
+def check_working_memory_size(
+    root: Path, settings: pace_settings.Settings
+) -> list[HealthIssue]:
+    """Flag working memory above the configured soft / hard char budgets.
+
+    The soft cap is what compaction force-promotes against; if the
+    body is over it, daily compaction either hasn't run or didn't have
+    enough qualifying material to trim. Either way, the user (or the
+    next scheduled run) should know. The hard cap is the threshold at
+    which ``pace_status`` truncates the body for context-window safety.
+    """
+    wm_path = root / WORKING_MEMORY
+    if not wm_path.is_file():
+        return []
+    try:
+        text = wm_path.read_text(encoding="utf-8")
+        _, body = frontmatter.parse(text)
+    except (OSError, ValueError):
+        return []
+
+    size = len(body)
+    if size <= settings.working_memory_soft_chars:
+        return []
+
+    over_hard = size > settings.working_memory_hard_chars
+    severity = "error" if over_hard else "warning"
+    return [
+        HealthIssue(
+            severity=severity,
+            code="working-memory-oversize",
+            message=(
+                f"Working memory body is {size:,} chars "
+                f"(soft target {settings.working_memory_soft_chars:,}, "
+                f"hard cap {settings.working_memory_hard_chars:,})."
+            ),
+            detail=(
+                "pace_status truncates the returned body when over the "
+                "hard cap; older content stays on disk and is searchable."
+                if over_hard
+                else None
+            ),
+            fix_hint=(
+                "Run the daily-compaction scheduled task (or `pace compact "
+                "--plan` then `pace compact --apply`). The apply step "
+                "force-promotes oldest entries to long-term storage until "
+                "the body is under the soft target."
+            ),
+        )
+    ]
 
 
 # ---- Serialization -----------------------------------------------------

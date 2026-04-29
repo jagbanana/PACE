@@ -35,7 +35,9 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from pace import doctor as doctor_ops
+from pace import entries as entries_mod
 from pace import projects as project_ops
+from pace import settings as pace_settings
 from pace import vault as vault_ops
 from pace.capture import capture as capture_entry
 from pace.frontmatter import parse as parse_frontmatter
@@ -82,6 +84,47 @@ def _not_initialized_response() -> dict[str, Any]:
     }
 
 
+_TRUNCATION_NOTICE = (
+    "\n\n[older entries elided to fit hard cap; "
+    "use pace_search to recall specific older content]\n"
+)
+
+
+def _truncate_working_memory(body: str, hard_chars: int) -> str:
+    """Return ``body`` capped at ``hard_chars`` for inclusion in pace_status.
+
+    Compaction normally keeps working memory below the *soft* cap; the
+    hard cap here is the safety net for "user fired off a flurry of
+    captures between scheduled tasks." We keep the newest entries that
+    fit and append a one-line notice so the model knows older content
+    exists and is reachable via ``pace_search``.
+
+    Falls back to a plain char-tail truncation if the body has no
+    parseable entries — exotic shape, but better than silently
+    returning a partial entry.
+    """
+    if len(body) <= hard_chars:
+        return body
+
+    parsed = entries_mod.split(body)
+    if not parsed:
+        return body[-hard_chars:]
+
+    budget = hard_chars - len(_TRUNCATION_NOTICE)
+    kept_reversed: list = []
+    total = 0
+    for entry in reversed(parsed):
+        text = entry.raw
+        addition = len(text) + (1 if kept_reversed else 0)
+        if total + addition > budget and kept_reversed:
+            break
+        kept_reversed.append(entry)
+        total += addition
+
+    kept = list(reversed(kept_reversed))
+    return entries_mod.join(kept) + _TRUNCATION_NOTICE
+
+
 
 
 # ---- Tools ------------------------------------------------------------
@@ -122,9 +165,10 @@ def pace_status() -> dict[str, Any]:
 
     wm_body = ""
     wm_path = root / WORKING_MEMORY
+    settings = pace_settings.load(root)
     if wm_path.is_file():
         _, body = parse_frontmatter(wm_path.read_text(encoding="utf-8"))
-        wm_body = body
+        wm_body = _truncate_working_memory(body, settings.working_memory_hard_chars)
 
     idx = _open_index(root)
     try:

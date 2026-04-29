@@ -30,10 +30,17 @@ from pathlib import Path
 from typing import Any
 
 from pace import frontmatter
-from pace.entries import Entry, append, remove, split
+from pace import settings as pace_settings
+from pace.entries import Entry, append, join, remove, split
 from pace.index import Index, now_iso
 from pace.io import atomic_write_text
 from pace.paths import LONG_TERM_DIR, WORKING_MEMORY
+
+# Topic file used when force-promoting oldest entries to keep working
+# memory under the soft char budget. Tagged ``#overflow`` so the LLM
+# can recognize entries it didn't get to triage during normal
+# compaction and revisit them during the next run.
+_OVERFLOW_TOPIC = "working-overflow"
 
 # Tag-driven topic suggestions. When the LLM doesn't override, these are
 # safe defaults that group related facts in the same long_term file.
@@ -72,6 +79,7 @@ class ApplyResult:
 
     promoted: int
     skipped: int
+    overflow_promoted: int
     log_path: Path | None
 
 
@@ -267,6 +275,36 @@ def apply_compaction(
             f"- promote → {target_rel}: {cand['source_heading']!r}"
         )
 
+    # If the LLM's decisions left working memory above the soft char
+    # budget, force-promote oldest entries to memories/long_term/
+    # working-overflow.md until the body fits. This is the safety net
+    # for "the LLM was conservative this run but the buffer keeps
+    # growing." Compaction shouldn't ever leave the vault unbounded.
+    settings = pace_settings.load(root)
+    overflow_promoted = 0
+    if len(wm_body) > settings.working_memory_soft_chars:
+        entries = split(wm_body)
+        # Sort defensively oldest-first; the file is normally
+        # chronological but we don't want to depend on that.
+        entries.sort(key=lambda e: e.timestamp)
+        overflow_target_rel = f"{LONG_TERM_DIR}/{_OVERFLOW_TOPIC}.md"
+        overflow_target_path = root / overflow_target_rel
+
+        while entries and len(join(entries)) > settings.working_memory_soft_chars:
+            oldest = entries.pop(0)
+            _append_to_long_term(
+                overflow_target_path, oldest, topic=_OVERFLOW_TOPIC
+            )
+            overflow_promoted += 1
+            log_lines.append(
+                f"- overflow → {overflow_target_rel}: {oldest.heading!r}"
+            )
+
+        if overflow_promoted:
+            wm_body = join(entries)
+            wm_dirty = True
+            _reindex_long_term(root, overflow_target_path, index)
+
     if wm_dirty:
         wm_fm["date_modified"] = now_iso()
         atomic_write_text(wm_path, frontmatter.dump(wm_fm, wm_body))
@@ -284,7 +322,12 @@ def apply_compaction(
     index.set_config("last_compact", now_iso())
 
     log_path = _write_run_log(root, "compact", log_lines)
-    return ApplyResult(promoted=promoted, skipped=skipped, log_path=log_path)
+    return ApplyResult(
+        promoted=promoted,
+        skipped=skipped,
+        overflow_promoted=overflow_promoted,
+        log_path=log_path,
+    )
 
 
 def _append_to_long_term(target_path: Path, entry: Entry, *, topic: str) -> None:

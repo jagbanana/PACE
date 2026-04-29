@@ -19,6 +19,7 @@ from pathlib import Path
 
 from pace import config as pace_config
 from pace import frontmatter, wikilinks
+from pace import settings as pace_settings
 from pace.index import Index, now_iso
 from pace.io import atomic_write_text
 from pace.onboarding import CLAUDE_MD_TEMPLATE, COMPACT_PROMPT, REVIEW_PROMPT
@@ -182,6 +183,13 @@ def init(root: Path) -> InitResult:
         if not prompt_path.exists():
             atomic_write_text(prompt_path, content)
             created_files.append(rel)
+
+    # pace_config.yaml -------------------------------------------------
+    # Documented defaults for working-memory budgets and other vault
+    # tunables. Idempotent; never overwrites a customized file.
+    cfg_path = pace_settings.write_default_if_missing(root)
+    if cfg_path is not None:
+        created_files.append(pace_settings.SETTINGS_FILE)
 
     # Git --------------------------------------------------------------
     git_initialized = _maybe_git_init(root)
