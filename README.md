@@ -11,15 +11,17 @@
 
 ## What PACE is
 
-Out of the box, every conversation with Claude starts from a blank slate. PACE fixes that for **knowledge work** — research, marketing, planning, strategy, anything multi-week — by giving the assistant a persistent, human-readable memory that lives next to your project, not in a cloud database.
+**Every new Claude session is like onboarding a brand-new intern.** You're sitting across from an incredibly book-smart assistant who knows nothing about your work, your style, your preferences, your business, or the people in your orbit. Tomorrow, same intern. Next month, same intern. Claude Projects and the Desktop app's memory features chip away at this — but neither gives you a system that *grows and evolves with you*, actually learning your decisions, your taste, and the texture of your business over weeks and months.
 
-You **never type a slash command.** You just talk to Claude. Behind the scenes:
+PACE solves that. It lets you stand up **individual, named coworkers** — each with its own personality and its own persistent memory — that mature from intern, to junior, to senior over the course of weeks of real work. The model behind it is the human one: each PACE coworker handles 3–4 projects for you, just like a real employee, and you bring them up the curve over time. Each has a name, an emoji, and a voice; each remembers the last conversation, the last decision, and why you made it.
 
-- When you state a fact, decision, preference, or person worth remembering, the assistant captures it silently.
-- When you mention a project — by name, alias, or even a topical phrase like *"the Q3 launch"* — the assistant pulls that project's summary into context before answering.
+PACE provides the core **persistent-agent capabilities** you'd find in projects like OpenClaw, but packaged as a Claude Cowork plugin and aimed at mature, day-to-day business use rather than experimental tinkering. The vault is plain Markdown on your local disk, the storage is human-readable and grep-able, and nothing is hidden from you.
+
+It's built for **knowledge work** — research, marketing, planning, strategy, anything multi-week. You **never type a slash command.** You just talk to Claude. Behind the scenes:
+
+- When you state a fact, decision, preference, or person worth remembering, the coworker captures it silently.
+- When you mention a project — by name, alias, or even a topical phrase like *"the Q3 launch"* — the coworker pulls that project's summary into context before answering.
 - A daily compaction and a weekly review run as background tasks to keep the vault tidy. They consolidate, promote, archive, and synthesize so memory stays useful instead of bloated.
-
-The result is an assistant that grows from feeling like a brilliant intern to a long-tenured employee you can groom and trust. Day by day it knows more about you, your business, and your projects.
 
 ### What it's *not*
 
