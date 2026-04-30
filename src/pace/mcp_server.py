@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import os
 import sys
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +38,7 @@ from mcp.server.fastmcp import FastMCP
 from pace import doctor as doctor_ops
 from pace import entries as entries_mod
 from pace import followups as fu_ops
+from pace import heartbeat as heartbeat_ops
 from pace import projects as project_ops
 from pace import settings as pace_settings
 from pace import vault as vault_ops
@@ -89,6 +91,52 @@ _TRUNCATION_NOTICE = (
     "\n\n[older entries elided to fit hard cap; "
     "use pace_search to recall specific older content]\n"
 )
+
+
+# v0.2.1 lazy-maintenance thresholds. PACE no longer relies on external
+# scheduled tasks; instead, ``pace_status`` flags when each maintenance
+# task is due, and the session-start contract in CLAUDE.md tells the
+# model to run them silently after greeting the user.
+
+_COMPACT_AGE_HOURS = 24       # compaction is "due" 24h after last run
+_REVIEW_AGE_DAYS = 7          # weekly review is "due" if 7d since last run
+
+
+def _needs_compact(last_compact_iso: str | None, *, now: datetime) -> bool:
+    """True if it's been at least 24h since the last compaction (or never)."""
+    if last_compact_iso is None:
+        return True
+    try:
+        last = datetime.fromisoformat(last_compact_iso)
+    except ValueError:
+        return True
+    return (now - last) >= timedelta(hours=_COMPACT_AGE_HOURS)
+
+
+def _needs_review(last_review_iso: str | None, *, now: datetime) -> bool:
+    """True if it's at least 7d since the last weekly review (or never).
+
+    Unlike compaction, weekly review is intentionally low-cadence — gating
+    purely on age (not weekday) keeps the trigger predictable across
+    timezones and missed weeks.
+    """
+    if last_review_iso is None:
+        return True
+    try:
+        last = datetime.fromisoformat(last_review_iso)
+    except ValueError:
+        return True
+    return (now - last) >= timedelta(days=_REVIEW_AGE_DAYS)
+
+
+def _needs_heartbeat(
+    settings: pace_settings.Settings, last_heartbeat_iso: str | None
+) -> bool:
+    """True if the heartbeat is opted-in and its run-window guard passes."""
+    if not settings.heartbeat_enabled:
+        return False
+    decision = heartbeat_ops.should_run(settings, last_run_iso=last_heartbeat_iso)
+    return decision.run
 
 
 def _truncate_working_memory(body: str, hard_chars: int) -> str:
@@ -148,6 +196,18 @@ def pace_status() -> dict[str, Any]:
         last_compact     — ISO timestamp or null
         last_review      — ISO timestamp or null
         last_heartbeat   — ISO timestamp or null
+        needs_compact    — bool. True if 24h+ since the last compaction.
+                           When true, run `pace compact --plan` then
+                           `--apply` silently AFTER replying to the
+                           user's first message of the session.
+        needs_review     — bool. True if 7d+ since the last weekly
+                           review. Same lazy-pattern: handle silently
+                           after the user has been greeted.
+        needs_heartbeat  — bool. True if the heartbeat is opted-in and
+                           ready to run (working hours, past cadence).
+                           Run `pace heartbeat --plan/--apply` lazily;
+                           findings surface via the next session's
+                           inbox.
         working_memory   — body of memories/working_memory.md (or empty)
         inbox            — list of ready followups to surface at the
                            top of your first reply (highest priority
@@ -166,6 +226,9 @@ def pace_status() -> dict[str, Any]:
             "last_compact": None,
             "last_review": None,
             "last_heartbeat": None,
+            "needs_compact": False,
+            "needs_review": False,
+            "needs_heartbeat": False,
             "working_memory": "",
             "inbox": [],
             "warnings": [],
@@ -192,6 +255,7 @@ def pace_status() -> dict[str, Any]:
     finally:
         idx.close()
 
+    now = datetime.now()
     return {
         "initialized": True,
         "root": str(root),
@@ -199,6 +263,9 @@ def pace_status() -> dict[str, Any]:
         "last_compact": last_compact,
         "last_review": last_review,
         "last_heartbeat": last_heartbeat,
+        "needs_compact": _needs_compact(last_compact, now=now),
+        "needs_review": _needs_review(last_review, now=now),
+        "needs_heartbeat": _needs_heartbeat(settings, last_heartbeat),
         "working_memory": wm_body,
         "inbox": inbox,
         "warnings": doctor_ops.report_to_warnings(report),

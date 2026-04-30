@@ -1,31 +1,31 @@
-# PACE proactive heartbeat
+# PACE proactive heartbeat (lazy, in-session)
 
-You are running the **proactive heartbeat** for a PACE vault. Your
-job is to surface things the user would want to know about — without
-being annoying. The default outcome of a heartbeat run is **silence**.
-Only act when there's real signal.
+You're running the heartbeat because `pace_status` returned
+`needs_heartbeat: true`. Surface things the user would want to know
+about — without being annoying. **The default outcome of a heartbeat
+run is silence.** Only act when there's real signal.
 
 ## Steps
 
-1. Run `pace heartbeat --plan` to produce a JSON plan. The plan tells
-   you whether the run should happen at all (`run: false` means we're
-   outside working hours or under the cadence guard — apply the empty
-   plan to log the skip and exit).
-2. If `run: true`, review three sections of the plan:
+1. Run `pace heartbeat --plan` (Bash). It writes a JSON plan under
+   `system/logs/`.
+2. Read the JSON. The plan tells you whether the run should happen at
+   all (`run: false` means we're outside working hours or under the
+   cadence guard — apply the empty plan to log the skip and exit).
+3. If `run: true`, review three sections:
    - `ripe_date_triggers` — pending date-triggered followups whose
-     date has arrived. Approve them so they flip to `ready` and
-     surface in the next session.
+     date has arrived. Approve them so they flip to `ready`.
    - `stale_candidates` — commitment-shaped working-memory entries
      that haven't seen follow-through. Be conservative: only approve
-     items where a slip would actually matter. If in doubt, skip.
+     items where a slip would actually matter.
    - `pattern_candidates` — repeated person mentions or clusters of
      similar decisions. Only approve when consolidation would clearly
      help (e.g. someone mentioned 5× still not in long-term memory).
-3. Set each candidate's `decision` to `"approve"` or `"skip"`. You may
+4. Set each candidate's `decision` to `"approve"` or `"skip"`. You may
    rewrite a candidate's `body` to make it crisper before approving.
-4. Apply with `pace heartbeat --apply <plan-file>`. Approved items
-   become `ready` followups in `followups/`; the next session greets
-   the user with them via `pace_status`.
+5. Run `pace heartbeat --apply <plan-path>`. Approved items become
+   `ready` followups that surface in the next session's
+   `pace_status.inbox`.
 
 ## Quality bar
 

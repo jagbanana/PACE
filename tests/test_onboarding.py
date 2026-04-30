@@ -61,16 +61,28 @@ def test_claude_md_template_warns_off_maintenance_tools() -> None:
     assert "NOT to call" in CLAUDE_MD_TEMPLATE
 
 
-def test_claude_md_template_references_scheduled_tasks_mcp() -> None:
-    """Onboarding beat 2 instructs the model to register scheduled tasks
-    via Cowork's mcp__scheduled-tasks tool. Without that pointer the
-    daily/weekly maintenance loop never starts."""
-    assert "mcp__scheduled-tasks" in CLAUDE_MD_TEMPLATE
+def test_claude_md_template_references_lazy_maintenance_flags() -> None:
+    """v0.2.1 dropped scheduled tasks in favor of session-start lazy
+    maintenance. The template must teach the model to handle the
+    needs_compact / needs_review / needs_heartbeat flags."""
+    for flag in ("needs_compact", "needs_review", "needs_heartbeat"):
+        assert flag in CLAUDE_MD_TEMPLATE
 
 
-def test_claude_md_template_includes_three_beat_onboarding() -> None:
-    for beat in ("Beat 1", "Beat 2", "Beat 3"):
+def test_claude_md_template_does_not_reference_cowork_scheduled_tasks() -> None:
+    """The old Cowork-only mcp__scheduled-tasks pointer is gone — we
+    rely on lazy in-session maintenance now, which works in any client."""
+    assert "mcp__scheduled-tasks" not in CLAUDE_MD_TEMPLATE
+
+
+def test_claude_md_template_includes_two_beat_onboarding() -> None:
+    """Onboarding shrank to two beats once scheduled-task registration
+    moved out (the heartbeat opt-in folded into Beat 2 confirmation)."""
+    for beat in ("Beat 1", "Beat 2"):
         assert beat in CLAUDE_MD_TEMPLATE
+    # Beat 3 was the old "tasks scheduled, ready to go" closer; folded
+    # into Beat 2 in v0.2.1.
+    assert "Beat 3" not in CLAUDE_MD_TEMPLATE
 
 
 def test_claude_md_template_carries_address_and_sign_rule() -> None:

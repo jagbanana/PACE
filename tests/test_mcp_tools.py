@@ -54,6 +54,48 @@ def test_status_initialized_returns_working_memory_and_counts(mcp_vault: Path) -
     assert result["warnings"] == []
 
 
+def test_status_lazy_maintenance_flags_present(mcp_vault: Path) -> None:
+    """v0.2.1 introduced needs_compact / needs_review / needs_heartbeat
+    so the model can run maintenance lazily at session start. They must
+    always be present on an initialized vault, even if false."""
+    result = pace_status()
+    assert "needs_compact" in result
+    assert "needs_review" in result
+    assert "needs_heartbeat" in result
+    # Fresh vault → never compacted → flag is true.
+    assert result["needs_compact"] is True
+    # Heartbeat opt-in is off by default.
+    assert result["needs_heartbeat"] is False
+
+
+def test_status_needs_compact_false_after_recent_run(mcp_vault: Path) -> None:
+    """Setting last_compact to now flips needs_compact off."""
+    from datetime import datetime
+
+    from pace.index import Index
+    from pace.paths import INDEX_DB
+
+    idx = Index(mcp_vault / INDEX_DB)
+    try:
+        idx.set_config("last_compact", datetime.now().isoformat(timespec="seconds"))
+    finally:
+        idx.close()
+    result = pace_status()
+    assert result["needs_compact"] is False
+
+
+def test_status_uninitialized_includes_lazy_flags(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Even when uninitialized, the response shape must carry the new
+    flags (false). Saves the model from KeyError-style branches."""
+    monkeypatch.setenv("PACE_ROOT", str(tmp_path / "uninit"))
+    result = pace_status()
+    assert result["needs_compact"] is False
+    assert result["needs_review"] is False
+    assert result["needs_heartbeat"] is False
+
+
 def test_status_surfaces_conflicted_copy_warnings(mcp_vault: Path) -> None:
     # Fabricate a OneDrive-style conflicted-copy file. The model is
     # supposed to raise this with the user before doing other work.

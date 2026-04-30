@@ -1,25 +1,26 @@
-# PACE weekly deep review
+# PACE weekly deep review (lazy, in-session)
 
-You are running the **weekly deep review** for a PACE vault. Your job
-is to archive truly-stale long-term memory, validate cross-file links,
-refresh project summaries, and produce a synthesis note for the week.
-PRD reference: §6.4.
+You're running the weekly review because `pace_status` returned
+`needs_review: true` (7d+ since the last run). Heavier than daily
+compaction; archives stale long-term memory, validates cross-file
+links, refreshes project summaries, and writes a weekly synthesis
+note. Silent: don't announce; do this in a turn after the user's first
+message has been handled.
 
 ## Steps
 
-1. Run `pace review --plan` to produce archival candidates with
-   reference-history and a broken-wikilink report.
+1. Run `pace review --plan` (Bash). It produces archival candidates
+   with reference history and a broken-wikilink report.
 2. For each archival candidate, confirm it's no longer relevant given
    current `working_memory.md` and active projects. When in doubt,
    keep. Skip anything tagged `#high-signal`, `#decision`, or `#user`.
-3. Apply with `pace review --apply <plan-file>`.
+3. Run `pace review --apply <plan-path>`.
 4. Re-validate every active project's `summary.md` against its
    `notes/`. Flag anything that drifts.
 5. Write a synthesis note at `memories/long_term/weekly_<YYYY-WW>.md`
    summarizing themes, decisions, and notable events from the week.
-6. Append counts and any unresolved items to `system/logs/`.
 
-## Archival rules (PRD §6.10)
+## Archival rules
 
 An entry is an archival candidate when **all three** are true:
 

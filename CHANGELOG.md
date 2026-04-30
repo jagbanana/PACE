@@ -4,6 +4,40 @@ All notable changes to PACE are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] — 2026-04-29
+
+### Changed
+- **Pivoted primary client from Claude Cowork to Claude Code.** Install
+  is now a single 3-step flow: download `pace-memory.plugin`, upload via
+  *Customize → Browse Plugins → Personal → Upload Plugin*, restart the
+  Claude Desktop App. No marketplace.json editing, no MAX_PATH
+  workarounds, no manual extraction.
+- **Replaced Cowork scheduled tasks with lazy in-session maintenance.**
+  `pace_status` now returns three new flags — `needs_compact`,
+  `needs_review`, `needs_heartbeat` — that the model handles silently
+  in its next turn after replying to the user's first message of the
+  session. No external scheduler required; works identically in any
+  MCP-aware client.
+- **Onboarding shrank from 3 beats to 2** (the scheduled-task
+  registration step is gone; the heartbeat opt-in folded into the
+  Beat 2 confirmation).
+- **`system/prompts/{compact,review,heartbeat}.md` repurposed** as
+  in-session reference docs instead of scheduled-task input. Same
+  content, different invocation.
+
+### Fixed
+- The Cowork-specific UX trap of "the plugin loads but tools don't
+  start" no longer affects new users — the install path that exhibits
+  it is no longer the primary path.
+
+### Known issues
+- **Cowork v0.2.x**: the plugin loads in Cowork but its MCP server
+  doesn't start. The bundled server itself is healthy (verified via
+  manual `uvx --from <plugin>/server pace-mcp`); the issue is in
+  Cowork's account-marketplace upload pipeline. Tracked at
+  https://github.com/jagbanana/PACE/issues. **Workaround: use Claude
+  Code.**
+
 ## [0.2.0] — 2026-04-29
 
 ### Added
@@ -89,6 +123,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - 160+ tests covering capture, search, compaction, review, doctor,
   MCP surface, plugin packaging, and onboarding artifacts.
 
+[0.2.1]: https://github.com/jagbanana/PACE/releases/tag/v0.2.1
 [0.2.0]: https://github.com/jagbanana/PACE/releases/tag/v0.2.0
 [0.1.2]: https://github.com/jagbanana/PACE/releases/tag/v0.1.2
 [0.1.1]: https://github.com/jagbanana/PACE/releases/tag/v0.1.1

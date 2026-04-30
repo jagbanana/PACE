@@ -171,9 +171,11 @@ def test_onboarding_reference_doc_exists() -> None:
     ref = PLUGIN_ROOT / "skills" / "pace-memory" / "references" / "onboarding.md"
     assert ref.is_file()
     text = ref.read_text(encoding="utf-8")
-    # Spot-check the three beats are documented.
-    for beat in ("Beat 1", "Beat 2", "Beat 3"):
+    # v0.2.1 reduced onboarding to two beats — scheduled-task
+    # registration is gone (replaced by in-session lazy maintenance).
+    for beat in ("Beat 1", "Beat 2"):
         assert beat in text
+    assert "Beat 3" not in text
 
 
 # ---- system-prompts --------------------------------------------------

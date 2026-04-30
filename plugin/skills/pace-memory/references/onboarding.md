@@ -1,7 +1,12 @@
 # PACE first-run onboarding
 
-Triggered when `pace_status` returns `initialized: false`. Three beats,
-max three of your turns. Adapt phrasing lightly to context; don't drift.
+Triggered when `pace_status` returns `initialized: false`. **Two beats,
+max two of your turns.** Adapt phrasing lightly to context; don't drift.
+
+PACE v0.2.1 dropped external scheduled-task registration in favor of
+*lazy* maintenance — the model handles compaction / review / heartbeat
+silently when `pace_status` flags them at session start. So onboarding
+no longer needs to wire up cron jobs.
 
 ## Beat 1 — Introduce + collect (one turn)
 
@@ -28,9 +33,8 @@ you picked in your next reply so they can object.
 After the user answers, call (in this order):
 
 1. `pace_init(root="<path they gave>")` — scaffolds the vault folder,
-   the SQLite index, `.gitignore`, the in-vault `CLAUDE.md`, and the
-   scheduled-task prompt files. Idempotent. Also records the path in
-   the per-user config so future sessions find it automatically.
+   the SQLite index, `.gitignore`, the in-vault `CLAUDE.md`, the
+   prompt reference files, and the per-user config record. Idempotent.
 2. `pace_capture(kind="long_term", topic="user", content="<their name
    and role/description>", tags=["#person", "#user"])`.
 3. **If the user picked a nickname (and possibly emoji):**
@@ -43,8 +47,8 @@ After the user answers, call (in this order):
    user as '<name>'; sign as '— <nickname> <emoji>'. Working on:
    <work description>.", tags=["#user", "#high-signal"])` — this
    pinned working-memory entry is exempt from compaction's
-   force-promotion (PRD §6.10), so personality stays in `pace_status`
-   output forever.
+   force-promotion, so personality stays in `pace_status` output
+   forever.
 
 If the user said "just Claude is fine" or otherwise declined a
 nickname, skip step 3 and write step 4 with just the user's name and
@@ -53,60 +57,31 @@ the work description (no `<nickname> <emoji>` portion). The
 applies — you'll just sign with the emoji alone (or skip the
 sign-off entirely if neither was given).
 
-## Beat 2 — Propose scheduled tasks
+## Beat 2 — Confirm + offer the heartbeat (one turn)
 
-> Saved. I'm setting up two background tasks so I can keep my memory
-> tidy without bothering you: a **daily** compaction that consolidates
-> each day's notes, and a **weekly** review that archives stale items
-> and synthesizes themes. They run inside Cowork while it's open.
-> Sound good?
-
-If the user agrees, register both tasks via Cowork's
-`mcp__scheduled-tasks__create_scheduled_task` tool. Both prompts ship
-with this plugin and resolve via the `${CLAUDE_PLUGIN_ROOT}` env var:
-
-- **Daily compaction** — daily at 5:00 local time. Read the contents
-  of `${CLAUDE_PLUGIN_ROOT}/system-prompts/compact.md` and pass it as
-  the task's prompt verbatim.
-- **Weekly review** — Sundays at 6:00 local time. Read
-  `${CLAUDE_PLUGIN_ROOT}/system-prompts/review.md` and pass it
-  verbatim.
-
-If the user declines, register both tasks anyway in a paused state (or
-note that the absence will be surfaced through future `pace_status`
-warnings). Don't push back.
-
-### Then ask about the optional proactive heartbeat
-
-> One more option: PACE has a **proactive heartbeat** that can check
-> in on you during your work hours — flagging stale commitments,
-> dated follow-ups coming due, and patterns it notices in your recent
-> work. It only surfaces things at the start of your next session
-> (it never interrupts), and it stays quiet when there's nothing
-> worth flagging. Want me to enable it? If yes, what hours and days
+> Saved. From here on, just talk to me normally — I'll handle
+> remembering, and I'll keep this vault tidy automatically (compaction
+> happens silently when we start a session if it's been a day or so).
+>
+> One optional thing: PACE has a **proactive heartbeat** that can flag
+> stale commitments, dated follow-ups coming due, and patterns I notice
+> in your recent work. It only surfaces things at the start of your
+> next session (it never interrupts), and stays quiet when nothing's
+> worth flagging. Want me to turn it on? If yes, what hours and days
 > are you typically working? (Default: 9:00–17:00, Mon–Fri.)
 
 **If the user says yes:**
 
-1. Open `<vault>/system/pace_config.yaml`. Set `heartbeat.enabled:
-   true` and adjust `working_hours_start`, `working_hours_end`, and
-   `working_days` to match what they told you. (You can use Edit or
-   Write directly; the file is plain YAML.)
-2. Register a third scheduled task:
-   - **Heartbeat** — every 60 minutes. Read
-     `${CLAUDE_PLUGIN_ROOT}/system-prompts/heartbeat.md` and pass it
-     verbatim. The in-vault working-hours / cadence guard keeps this
-     honest even if Cowork's cron ticks more often.
+Edit `<vault>/system/pace_config.yaml`:
+- Set `heartbeat.enabled: true`
+- Set `working_hours_start`, `working_hours_end`, `working_days` to
+  match what they told you. (Use Edit or Write directly; plain YAML.)
 
-**If the user says no**, leave `heartbeat.enabled: false` and skip
-the third scheduled task. They can opt in later by editing the config
-and asking you to register the task.
+Then close: *"Done — what would you like to work on?"*
 
-## Beat 3 — Confirm + finish (one turn)
-
-> Done. Vault folder created at `<path>`, version control initialized,
-> all tasks scheduled. From here on, just talk to me normally — I'll
-> handle remembering. What would you like to work on?
+**If the user says no**, leave `heartbeat.enabled: false`. They can
+opt in later by editing the config (or asking you to). Close:
+*"Got it. What would you like to work on?"*
 
 End onboarding. Resume normal flow with the user's next message.
 
@@ -123,4 +98,4 @@ End onboarding. Resume normal flow with the user's next message.
   Markdown, nothing is hidden. Then resume.
 - **`pace_init` returns `already_initialized: true`.** The path the
   user gave is already a vault. Skip the captures (don't double-write)
-  and proceed straight to Beat 2 to propose scheduled tasks.
+  and proceed straight to Beat 2.

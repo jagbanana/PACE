@@ -13,26 +13,27 @@
 
 **Every new Claude session is like onboarding a brand-new intern.** You're sitting across from an incredibly book-smart assistant who knows nothing about your work, your style, your preferences, your business, or the people in your orbit. Tomorrow, same intern. Next month, same intern. Claude Projects and the Desktop app's memory features chip away at this — but neither gives you a system that *grows and evolves with you*, actually learning your decisions, your taste, and the texture of your business over weeks and months.
 
-PACE solves that. It lets you stand up **individual, named coworkers**, each with its own personality and its own persistent memory. PACE agents mature from intern, to junior, to senior over the course of weeks of real work. 
+PACE solves that. It lets you stand up **individual, named coworkers**, each with its own personality and its own persistent memory. PACE agents mature from intern, to junior, to senior over the course of weeks of real work.
 
-- Core OpenClaw workflows bundled as a Claude Cowork plugin
+- Installs as a single Claude Code plugin — upload one file and you're done
 - Each PACE agent can handle multiple projects, just like real humans
 - Learns your work style, preferences, and project details, evolving to you and the job
 - Optional heartbeat for proactive tasks
 - Adheres to your Claude Desktop App permission and security settings
 - Maintains long-term memory without bloating context
 - Performs its own maintenance, staying performant via indexing and linking
-- Everything is human readable via Obsidian
+- Everything is human-readable via Obsidian
 
 The model behind it is the human one: each PACE coworker handles 3–4 projects for you, just like a real employee, and you bring them up the curve over time. Each has a name, an emoji, and a voice; each remembers the last conversation, the last decision, and why you made it.
 
-PACE provides the core **persistent-agent capabilities** you'd find in projects like OpenClaw, but packaged as a Claude Cowork plugin and aimed at mature, day-to-day business use rather than experimental tinkering. The vault is plain Markdown on your local disk, the storage is human-readable and grep-able, and nothing is hidden from you.
+PACE provides the core **persistent-agent capabilities** you'd find in projects like OpenClaw, but packaged as a Claude Code plugin and aimed at mature, day-to-day business use rather than experimental tinkering. The vault is plain Markdown on your local disk, the storage is human-readable and grep-able, and nothing is hidden from you.
 
 It's built for **knowledge work** — research, marketing, planning, strategy, anything multi-week. You **never type a slash command.** You just talk to Claude. Behind the scenes:
 
 - When you state a fact, decision, preference, or person worth remembering, the coworker captures it silently.
 - When you mention a project — by name, alias, or even a topical phrase like *"the Q3 launch"* — the coworker pulls that project's summary into context before answering.
-- A daily compaction and a weekly review run as background tasks to keep the vault tidy. They consolidate, promote, archive, and synthesize so memory stays useful instead of bloated.
+- Compaction and weekly review run **silently at session start** when they're due — no scheduled tasks, no cron, no manual setup. Claude handles them in the background while you start your day.
+- An optional **proactive heartbeat** quietly checks during your work hours for things worth flagging — dated follow-ups coming due, stale commitments, repeated patterns — and surfaces them at the top of your *next* session. Never interrupts; defaults to silence.
 
 ### What it's *not*
 
@@ -42,7 +43,7 @@ It's built for **knowledge work** — research, marketing, planning, strategy, a
 
 ### Status
 
-v0.2.0 — beta. The Cowork plugin and Claude Code CLI workflow are both stable; 220+ tests cover capture, search, compaction, review, the proactive heartbeat, and the MCP surface. Used daily by the maintainer. Mac dogfood pending; Windows + OneDrive is the primary target.
+v0.2.1 — beta. Targets **Claude Code** as the primary client (one-click plugin install, fully working). Cowork support exists but has a known regression in v0.2.0+ (see [Cowork status](#cowork-status) below). 230+ tests cover capture, search, compaction, review, the proactive heartbeat, and the MCP surface. Used daily by the maintainer. Mac dogfood pending; Windows + OneDrive is the primary target.
 
 ---
 
@@ -61,25 +62,26 @@ PACE has four moving parts that all read from and write to a folder of Markdown 
                   reads / writes    reads / writes    reads / writes
                         │                │                 │
         ┌───────────────┴──┐    ┌────────┴──────┐ ┌────────┴────────────┐
-        │   MCP server     │    │      CLI      │ │   Scheduled tasks   │
-        │  (pace_mcp)      │    │     (pace)    │ │ daily / weekly /    │
-        │                  │    │               │ │ heartbeat (opt-in)  │
-        │  pace_status     │    │ pace init     │ │                     │
-        │  pace_capture    │    │ pace status   │ │ compact prompt      │
-        │  pace_search     │    │ pace capture  │ │ review prompt       │
-        │  pace_load_proj. │    │ pace search   │ │ heartbeat prompt    │
-        │  pace_create_*   │    │ pace doctor   │ │                     │
-        │  pace_init       │    │ pace reindex  │ │ run inside Cowork   │
-        │  pace_list_proj. │    │ pace archive  │ │ no API calls        │
+        │   MCP server     │    │      CLI      │ │  Lazy maintenance   │
+        │  (pace_mcp)      │    │     (pace)    │ │  (in-session)       │
+        │                  │    │               │ │                     │
+        │  pace_status     │    │ pace init     │ │ compact when due    │
+        │  pace_capture    │    │ pace status   │ │ review when due     │
+        │  pace_search     │    │ pace capture  │ │ heartbeat (opt-in)  │
+        │  pace_load_proj. │    │ pace search   │ │                     │
+        │  pace_create_*   │    │ pace doctor   │ │ triggered by flags  │
+        │  pace_init       │    │ pace reindex  │ │ on pace_status      │
+        │  pace_list_proj. │    │ pace archive  │ │ at session start    │
         │  pace_*followup  │    │ pace compact  │ │                     │
         └────────▲─────────┘    │ pace review   │ └──────────▲──────────┘
                  │              │ pace heartbeat│            │
                  │              │ pace followup │            │
                  │              └───────────────┘            │
             invoked by                                   invoked by
-            the model                                   Cowork's
-            (Claude in Cowork                           scheduled-task
-             or Claude Code)                            system
+            the model                                   the model
+            (Claude in                                  in the next
+             Claude Code)                               turn after the
+                                                        first reply
 ```
 
 The MCP server and the CLI are thin wrappers over the same Python functions — there's a single source of truth for every read and every write.
@@ -115,10 +117,10 @@ your-vault/
 ├── system/
 │   ├── pace_index.db              ← SQLite FTS5 index (rebuildable)
 │   ├── pace_config.yaml           ← tunables (budgets, retention, etc.)
-│   ├── prompts/
-│   │   ├── compact.md             ← daily-task prompt (read by Cowork)
-│   │   ├── review.md              ← weekly-task prompt
-│   │   └── heartbeat.md           ← optional proactive heartbeat
+│   ├── prompts/                   ← in-session reference docs the
+│   │   ├── compact.md                model consults when the matching
+│   │   ├── review.md                 needs_* flag flips on pace_status
+│   │   └── heartbeat.md
 │   └── logs/                      ← maintenance run logs
 │
 ├── .mcp.json                      ← Claude Code stdio server registration
@@ -134,8 +136,8 @@ The contract between the model and PACE is small and front-loaded. At session st
 
 ```
    ┌─────────────────────┐
-   │ User opens Cowork   │
-   │ in any folder       │
+   │ User opens a folder │
+   │ in Claude Code      │
    └─────────┬───────────┘
              │
              ▼
@@ -193,7 +195,7 @@ The model is instructed to capture **only durable context** worth having next se
 
 ✅ **Capture** — names, roles, identifiers (account numbers, ticker symbols, slugs), key dates, decisions ("we picked option B because…"), validated approaches, corrections to earlier mistakes, business facts, anything tagged `#high-signal` or `#decision`.
 
-❌ **Skip** — debugging chatter, filler, code already in git, generic how-to answers, anything cross-folder that belongs in Cowork's own auto-memory rather than this PACE root.
+❌ **Skip** — debugging chatter, filler, code already in git, generic how-to answers, anything cross-folder that belongs in the client's own auto-memory rather than this PACE root.
 
 The standard tag set is small: `#person`, `#identifier`, `#date`, `#user`, `#business`, `#preference`, `#decision`, `#high-signal`. Tags drive both retrieval *and* retention — three of them are exempt from auto-archival (see below).
 
@@ -223,26 +225,35 @@ The standard tag set is small: `#person`, `#identifier`, `#date`, `#user`, `#bus
 
 Every write is atomic (`pace.io.atomic_write_text`) so a crashed sync engine or an antivirus scanner can't leave the vault half-written.
 
-### Daily compaction — keeping working memory bounded
+### Lazy maintenance — compaction, review, and heartbeat at session start
 
-If working memory grew unbounded, `pace_status` would balloon and every session would carry yesterday's noise. So at 5:00 local time each day, Cowork's scheduled-task system runs the daily compaction prompt (which lives in `system/prompts/compact.md`):
+PACE has no external scheduler — no cron, no Windows Task Scheduler, no Cowork scheduled-task system. Instead, every `pace_status` call returns three flags:
+
+- `needs_compact` — true if 24h+ since the last compaction
+- `needs_review` — true if 7d+ since the last weekly review
+- `needs_heartbeat` — true if the heartbeat is opted-in and ready to fire
+
+Claude reads these at session start and runs whatever's flagged **silently in the next turn after replying to your first message** — so you greet your coworker normally, get an instant response, and the maintenance happens in the background while you decide what to ask next.
 
 ```
-   ┌──────────────────────────────────────────────────────┐
-   │ pace compact --plan                                  │
-   │   reads yesterday's working file + recent activity   │
-   │   emits a JSON plan: promote, refresh, archive       │
-   └─────────────────┬────────────────────────────────────┘
-                     │  (Claude in Cowork reviews / refines)
-                     ▼
-   ┌──────────────────────────────────────────────────────┐
-   │ pace compact --apply <plan.json>                     │
-   │   1. Promote working entries to memories/long_term/  │
-   │      based on age + reference count + tags           │
-   │   2. Refresh project summaries that saw activity     │
-   │   3. Force-promote oldest non-exempt entries until   │
-   │      working memory fits within the soft budget      │
-   └──────────────────────────────────────────────────────┘
+   ┌────────────────────────────────────────────────────────┐
+   │ Session start: pace_status returns needs_compact=true  │
+   └─────────────────────┬──────────────────────────────────┘
+                         │
+                         ▼
+   ┌────────────────────────────────────────────────────────┐
+   │ Claude greets you, answers your first message          │
+   └─────────────────────┬──────────────────────────────────┘
+                         │
+                         ▼
+   ┌────────────────────────────────────────────────────────┐
+   │ Next turn (silently):                                  │
+   │   1. pace compact --plan  → JSON of promotion candids  │
+   │   2. Claude approves / skips per system/prompts/       │
+   │      compact.md                                        │
+   │   3. pace compact --apply <plan>                       │
+   │   → working memory trimmed, long-term files updated    │
+   └────────────────────────────────────────────────────────┘
 ```
 
 **Promotion rules** are conservative — an entry is promoted to long-term when:
@@ -261,10 +272,10 @@ Working memory is loaded in full on every `pace_status` call, so its size matter
                           ┌─────────────────────────┐
    working memory size →  │  16 000 chars (soft)    │  ≈ 4K tokens
                           │  ─────────────────────  │
-                          │  daily compaction       │  force-promotes
-                          │  triggers force-promote │  oldest non-exempt
-                          │  to bring back below    │  entries to
-                          │  soft cap               │  long_term/working-
+                          │  next compaction        │  force-promotes
+                          │  force-promotes oldest  │  oldest non-exempt
+                          │  non-exempt entries to  │  entries to
+                          │  bring back below cap   │  long_term/working-
                           │                         │  overflow.md
                           ├─────────────────────────┤
                           │  32 000 chars (hard)    │  ≈ 8K tokens
@@ -276,11 +287,11 @@ Working memory is loaded in full on every `pace_status` call, so its size matter
                           └─────────────────────────┘
 ```
 
-This means **the model's session-start payload is bounded** even if compaction hasn't run for a few days. Truncation is non-destructive — older entries stay on disk and surface via `pace_search`.
+This means **the model's session-start payload is bounded** even if you haven't opened Claude Code in a week. Truncation is non-destructive — older entries stay on disk and surface via `pace_search`.
 
 ### Weekly review — archiving the genuinely stale
 
-Sundays at 6:00 local time, the weekly review prompt runs. It looks at every long-term entry and asks two questions:
+When `needs_review` is set (7d+ since last run), Claude runs the weekly review with the same lazy plan/apply ritual as compaction. It looks at every long-term entry and asks two questions:
 
 1. **Is it old?** Older than 90 days (configurable).
 2. **Is it cold?** No references in the last N days, no recent edits.
@@ -293,12 +304,12 @@ Review also writes a short synthesis note for the week — themes that emerged a
 
 Most memory systems are passive: they remember things if you ask. PACE has an optional **heartbeat** that goes one step further — it quietly checks during your work hours for things worth flagging, and surfaces them at the **start of your *next* session**. It never interrupts mid-conversation, never sends OS notifications, and the default outcome of any single run is silence.
 
-You opt in during onboarding and define your working hours (default: 9:00–17:00, Mon–Fri). The heartbeat then runs as a third Cowork scheduled task and looks at three signals:
+You opt in during onboarding and define your working hours (default: 9:00–17:00, Mon–Fri). When you next open Claude Code inside that window and `pace_status` flips `needs_heartbeat: true`, the scanner runs lazily in the same way as compaction. It looks at three signals:
 
 ```
    ┌──────────────────────────────────────────────────────────┐
-   │ pace heartbeat --plan         (every cadence_minutes,    │
-   │                                inside working hours)     │
+   │ pace heartbeat --plan         (in-session, when          │
+   │                                pace_status flags it)     │
    │                                                          │
    │   1. Ripe date triggers — pending followups whose date   │
    │      arrived → flip to ready                             │
@@ -328,7 +339,7 @@ You opt in during onboarding and define your working hours (default: 9:00–17:0
    └──────────────────────────────────────────────────────────┘
 ```
 
-**Quality bar.** The scheduled-task prompt's first instruction is *the default outcome of a heartbeat run is silence*. The model is told to skip anything that's borderline, and PACE itself gates the run on three things: feature flag, working hours/days, and a cadence guard that prevents back-to-back fires even if Cowork's cron ticks more often.
+**Quality bar.** The in-session prompt's first instruction is *the default outcome of a heartbeat run is silence*. The model is told to skip anything that's borderline, and PACE itself gates the run on three things: feature flag, working hours/days, and a cadence guard that prevents back-to-back fires.
 
 **Followup data model.** Each followup is a single Markdown file at `followups/<id>.md` with YAML frontmatter:
 
@@ -363,7 +374,7 @@ heartbeat:
   pattern_min_repeats: 3        # repeated mentions to surface
 ```
 
-You can opt out at any time by flipping `enabled: false` (the scheduled task still ticks, but the orchestrator returns a no-op plan).
+You can opt out at any time by flipping `enabled: false` — `pace_status.needs_heartbeat` will return `false` and the scanner is dormant.
 
 ### Project context switching
 
@@ -383,7 +394,7 @@ The MCP server figures out which vault to talk to via this chain (first hit wins
 
 ```
    1. PACE_ROOT env var                                   ← debugging
-   2. CLAUDE_PLUGIN_OPTION_VAULT_ROOT env var             ← Cowork plugin config
+   2. CLAUDE_PLUGIN_OPTION_VAULT_ROOT env var             ← plugin userConfig
    3. Per-user config file:
         Windows:   %APPDATA%\pace\config.json
         macOS/Lx:  ~/.config/pace/config.json
@@ -392,46 +403,34 @@ The MCP server figures out which vault to talk to via this chain (first hit wins
         initialized: false → onboarding picks a path
 ```
 
-This is why a single Cowork install can serve every project: the vault location is set once, in step 2 or 3, and survives restarts.
+This is why a single PACE install can serve every project: the vault location is set once, in step 2 or 3, and survives restarts.
 
 ---
 
 ## Install
 
-There are two install paths depending on which Claude client you're using.
+Three steps. Total time: under a minute, plus a Claude Desktop restart.
 
-### Option A — Claude Cowork (recommended)
+1. **Download `pace-memory.plugin`** from the [releases page](https://github.com/jagbanana/PACE/releases).
+2. **Open the Claude Desktop App** and go to **Customize → Browse Plugins → Personal → Upload Plugin**. Select the `.plugin` file you just downloaded.
+3. **Restart the Claude Desktop App.**
 
-This is the supported path for almost everyone. Cowork doesn't load project-scoped `.mcp.json` files, so a plugin is the only way to wire MCP into Cowork.
+That's it. Open any folder you want to be a PACE vault in **Claude Code**, start a session, and Claude will run the two-question onboarding automatically (your name + an optional nickname/emoji for the assistant). From then on, just talk.
 
-**Prerequisites**
+**Prerequisite:** [`uv`](https://docs.astral.sh/uv/) needs to be on your `PATH` so the plugin can run the bundled PACE source. Install with:
 
-- [Claude Cowork](https://claude.com) installed and running.
-- [`uv`](https://docs.astral.sh/uv/) on your `PATH`. The plugin uses `uvx` to run the bundled PACE source in an isolated environment, so you don't manage Python yourself.
-  - Windows (PowerShell): `irm https://astral.sh/uv/install.ps1 | iex`
-  - macOS / Linux: `curl -LsSf https://astral.sh/uv/install.sh | sh`
-- After installing `uv`, **fully quit and relaunch Cowork** (kill tray processes too) so the new `PATH` propagates.
+- Windows (PowerShell): `irm https://astral.sh/uv/install.ps1 | iex`
+- macOS / Linux: `curl -LsSf https://astral.sh/uv/install.sh | sh`
 
-**Steps**
+After installing `uv`, fully quit and relaunch the Claude Desktop App so the new `PATH` propagates.
 
-1. Download `pace-memory.plugin` from the [releases page](https://github.com/jagbanana/PACE/releases) — or build it yourself (see [Building from source](#building-from-source) below).
-2. **Heads up:** Cowork and Claude Code share the desktop app but use *separate* plugin stores. A plugin installed via *Settings → Customize* lands in **Claude Code's** store and won't appear in Cowork. Cowork has its own marketplace folder under your active session directory.
-3. Extract `pace-memory.plugin` into Cowork's local-uploads marketplace. PowerShell's built-in `tar` works on `.plugin` directly without renaming:
-   ```powershell
-   $dest = "$env:APPDATA\Claude\local-agent-mode-sessions\<session>\<session>\cowork_plugins\marketplaces\local-desktop-app-uploads\pace-memory"
-   New-Item -ItemType Directory -Path $dest -Force | Out-Null
-   tar -xf "C:\path\to\pace-memory.plugin" -C $dest
-   ```
-   *Other extractors that work: 7-Zip, Git Bash's `unzip`, or Windows' built-in **Extract All** after renaming `.plugin` to `.zip`. Don't use Python's `zipfile.extractall` — it doesn't opt into Windows long paths and Cowork's session-UUID nesting will trip MAX_PATH.*
-4. Register the plugin in that marketplace's `marketplace.json` by adding a `pace-memory` entry to the `plugins` array. Full example in [`plugin/README.md`](plugin/README.md#step-5--register-the-plugin-in-the-marketplace-manifest).
-5. Restart Cowork, open its plugin/customize panel, find `pace-memory`, and enable it. Cowork prompts for the optional `vaultRoot` field — leave blank to let onboarding pick a path.
-6. Open Cowork in any folder and start a conversation. The bundled skill detects an uninitialized vault and runs a short three-question onboarding (your name, an optional assistant nickname + emoji, and the rough nature of your work). After that, just talk.
+### Cowork status
 
-Full plugin docs (including the long-path / extraction gotcha and how to verify the install landed in the right store): [`plugin/README.md`](plugin/README.md).
+PACE was originally built for Claude Cowork (the agent-mode tab in the same Desktop app). On v0.1.x, the Cowork plugin path worked. **On v0.2.0+, the Cowork plugin loads but its MCP server doesn't start** — the cause is somewhere in Cowork's account-marketplace upload pipeline, not in PACE itself (the bundled server runs fine when invoked directly). Tracked at [github.com/jagbanana/PACE/issues](https://github.com/jagbanana/PACE/issues). For now, **use Claude Code.**
 
-### Option B — Claude Code (CLI workflow)
+### Power-user install (from source)
 
-For Claude Code users, the `.mcp.json` mechanism *does* work, so the simpler "vault is a project folder" workflow is supported:
+If you want to develop PACE itself or bypass the plugin entirely:
 
 ```bash
 git clone https://github.com/jagbanana/PACE.git my-pace-vault
@@ -442,7 +441,7 @@ pip install -e ".[dev]"
 pace init                       # scaffolds the vault, writes .mcp.json
 ```
 
-Open `my-pace-vault` in Claude Code. The generated `.mcp.json` registers the local stdio server and the in-vault `CLAUDE.md` tells the model how to behave. From there the experience matches the plugin path.
+Open `my-pace-vault` in Claude Code. The generated `.mcp.json` registers the local stdio server, and the in-vault `CLAUDE.md` tells the model how to behave.
 
 ---
 
@@ -510,11 +509,11 @@ There are 220+ tests covering capture, search, compaction, review, the proactive
 ```
 src/pace/         # Python package: CLI, MCP server, indexer, etc.
 tests/            # pytest suite
-plugin/           # Cowork plugin source — bundled into pace-memory.plugin
+plugin/           # Claude Code plugin source — bundled into pace-memory.plugin
   ├── .claude-plugin/plugin.json
   ├── .mcp.json
   ├── skills/pace-memory/    # SKILL.md the model loads at session start
-  └── system-prompts/        # compact.md, review.md, heartbeat.md (scheduled-task prompts)
+  └── system-prompts/        # compact.md, review.md, heartbeat.md (in-session reference docs)
 scripts/          # build_plugin.py
 pyproject.toml    # entry points: pace = pace.cli:main; pace-mcp = pace.mcp_server:main
 LICENSE
@@ -527,19 +526,15 @@ The runtime vault directories (`memories/`, `projects/`, `system/`) are created 
 
 ## Troubleshooting
 
-### Cowork doesn't list `pace_*` tools after installing the plugin
-
-Most common cause: the plugin landed in **Claude Code's** plugin store rather than Cowork's marketplace. Both UIs live inside the same desktop app and look similar, but they're separate stores. Check `%APPDATA%\Claude\local-agent-mode-sessions\<session>\<session>\cowork_plugins\installed_plugins.json` — if `"plugins"` is `{}`, Cowork has zero plugins enabled and the install went to the wrong place. Walk through Option A above to put it in Cowork's marketplace.
-
-If `installed_plugins.json` *does* show `pace-memory` and the tools still don't appear, then `uv` is the issue: confirm `uv --version` works in PowerShell, then fully quit Cowork (including tray processes via Task Manager) and relaunch.
-
-### Extraction failed with `FileNotFoundError` or "Path too long"
-
-Windows MAX_PATH (260-char) limit. Cowork's session directory contains two UUIDs that already eat ~80 characters; combined with the plugin's internal `skills\pace-memory\references\onboarding.md` nesting, some files blow past the limit. Use Windows' built-in *Extract All*, Git Bash's `unzip`, 7-Zip, or `tar -xf` from PowerShell — they all opt into long-path mode. Python's `zipfile.extractall` does *not*.
-
 ### Claude Code doesn't list `pace_*` tools
 
-Check that `.mcp.json` exists at the vault root. If not, `pace init` didn't run or didn't complete. The file's `command` field must point at a Python interpreter that has `pace` installed (re-run `pace init` if you moved the venv).
+Two paths to check. If you installed via the plugin upload (the recommended path):
+
+- Confirm `uv --version` works in your terminal. The plugin's MCP server uses `uvx` to run the bundled source.
+- Fully quit and relaunch the Claude Desktop App. PATH is read at launch; an `uv` install during a running session won't be seen until a clean restart.
+- Check `~/.claude/plugins/installed_plugins.json`. `pace-memory@local-desktop-app-uploads` should appear there after upload + restart.
+
+If you went the power-user / "from source" route, check that `.mcp.json` exists at the vault root. If not, `pace init` didn't complete. The file's `command` field must point at a Python interpreter that has `pace` installed (re-run `pace init` if you moved the venv).
 
 ### "OneDrive has marked vault files as online-only"
 
@@ -549,9 +544,9 @@ Check that `.mcp.json` exists at the vault root. If not, `pace init` didn't run 
 
 `pace doctor` flagged `conflicted-copies`. Two devices wrote divergent versions of the same file. PACE never picks a winner — open both, merge by hand, then `pace archive <path-to-loser>` to preserve the discarded version.
 
-### "Daily compaction has never run" / "hasn't run in Nd Nh"
+### "Compaction hasn't run in Nd Nh"
 
-The scheduled task isn't firing. Check Cowork's scheduled-task UI to confirm the task is registered and not paused. The task only fires while Cowork is open on this machine — if you don't open Cowork on a given day, that day's compaction is skipped. PACE catches up on the next run.
+Compaction runs lazily at session start. If you haven't opened Claude Code in a while, the next time you do, Claude will run compaction silently after replying to your first message. There's nothing to schedule or fix. If `pace doctor` is flagging it as truly stale (weeks), confirm `pace_status` returns `needs_compact: true` — if it does, the next session will catch up.
 
 ### "N file(s) modified on disk after last index"
 
@@ -569,7 +564,7 @@ You're running pytest outside the venv. Activate it (`.venv\Scripts\activate`) a
 
 ## Platform support
 
-- **Windows 11** with Cowork — primary target.
+- **Windows 11** with Claude Code — primary target.
 - **macOS** — should work; the only Windows-specific code path is `pace doctor`'s OneDrive virtualization check, which is gated by `sys.platform`. Mac dogfood pending.
 - **OneDrive** — supported, but the PACE root must be configured "Always keep on this device." `pace doctor` verifies this.
 
@@ -578,7 +573,7 @@ You're running pytest outside the venv. Activate it (`.venv\Scripts\activate`) a
 - **Local-first.** Markdown files + Python CLI + SQLite FTS5 + an MCP server. No vector DBs, no cloud services, no API keys.
 - **Human-readable.** Everything PACE writes is browsable in [Obsidian](https://obsidian.md): `[[Wikilinks]]`, `#tags`, YAML frontmatter.
 - **Seamless.** The user never types a command or remembers a syntax. The model decides when to capture, search, or load project context.
-- **Self-maintaining.** Daily compaction and weekly review run as Cowork scheduled tasks. PACE never hits the Anthropic API directly — Claude itself does the LLM work, in-session.
+- **Self-maintaining.** Compaction, weekly review, and the heartbeat run lazily at session start when due. No external schedulers; no cron; no manual setup. Claude itself does the LLM work, in-session.
 - **Conservative by default.** Nothing is ever deleted; archive is a one-way move you can grep. Force-promotion exempts identity / decision tags so personality and high-signal context survive forever.
 
 ## Contributing

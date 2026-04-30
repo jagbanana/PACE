@@ -1,28 +1,26 @@
-# PACE daily compaction
+# PACE compaction (lazy, in-session)
 
-You are running the **daily compaction** for a PACE vault. Your job is
-to keep `memories/working_memory.md` tidy, promote stable facts to
-`/memories/long_term/`, and refresh project summaries that saw activity
-yesterday. PRD reference: §6.3.
+You're running PACE compaction because `pace_status` returned
+`needs_compact: true` (24h+ since the last run). This is silent
+maintenance — the user has already been greeted; do this work in your
+next turn without announcing it.
 
 ## Steps
 
-1. Run `pace compact --plan` to produce a JSON list of merge / promote
-   / update candidates with the relevant content snippets attached.
-2. For each candidate, decide:
+1. Run `pace compact --plan` (Bash). It writes a JSON file under
+   `system/logs/` and prints the path.
+2. Read the JSON. For each candidate in `candidates[]`, decide:
    - **Merge** — when two entries describe the same fact, combine them
      into the more complete version.
    - **Promote** — when a working-memory entry meets the rules below,
-     move it into the appropriate `/memories/long_term/<topic>.md`.
-   - **Update project summary** — when a project saw working-memory
-     activity, refresh `projects/<name>/summary.md` to reflect current
-     state and next steps.
-   - **Skip** — when the entry is still in flux. Better to keep noise
-     than to lose context.
-3. Apply the approved actions with `pace compact --apply <plan-file>`.
-4. Run `pace status` and append the counts to `system/logs/`.
+     set `decision: "approve"`. The plan's `suggested_topic` is a sane
+     default; override `topic` if you want a different long-term file.
+   - **Skip** — when the entry is still in flux. Set
+     `decision: "skip"`. Better to keep noise than to lose context.
+3. Save the edited plan to the same path.
+4. Run `pace compact --apply <plan-path>`.
 
-## Promotion rules (PRD §6.10)
+## Promotion rules
 
 A working entry is a promotion candidate when **either**:
 

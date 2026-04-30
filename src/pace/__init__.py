@@ -8,4 +8,4 @@ See the project README and https://github.com/jagbanana/PACE for the
 full design overview and architecture.
 """
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
