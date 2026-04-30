@@ -2,6 +2,7 @@
 
 > **A local, human-readable memory system that gives Claude persistence across sessions.**
 > Markdown files. SQLite FTS5. An MCP server. No cloud, no vector DB, no API keys.
+> Like OpenClaw, but as a self-contained Claude Plugin.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
@@ -13,10 +14,13 @@
 
 **Every new Claude session is like onboarding a brand-new intern.** You're sitting across from an incredibly book-smart assistant who knows nothing about your work, your style, your preferences, your business, or the people in your orbit. Tomorrow, same intern. Next month, same intern. Claude Projects and the Desktop app's memory features chip away at this — but neither gives you a system that *grows and evolves with you*, actually learning your decisions, your taste, and the texture of your business over weeks and months.
 
-PACE solves that. It lets you stand up **individual, named coworkers**, each with its own personality and its own persistent memory. PACE agents mature from intern, to junior, to senior over the course of weeks of real work.
+PACE solves that. 
 
-- Installs as a single Claude Code plugin — upload one file and you're done
+It lets you stand up **individual, named coworkers**, each with its own personality and its own persistent memory. PACE agents mature from intern, to junior, to senior over the course of weeks of real work.
+
+- Installs as a single Claude Desktop App plugin — upload one file and you're done
 - Each PACE agent can handle multiple projects, just like real humans
+- Natural language onboarding, no technical configuration
 - Learns your work style, preferences, and project details, evolving to you and the job
 - Optional heartbeat for proactive tasks
 - Adheres to your Claude Desktop App permission and security settings
@@ -31,9 +35,11 @@ PACE provides the core **persistent-agent capabilities** you'd find in projects 
 It's built for **knowledge work** — research, marketing, planning, strategy, anything multi-week. You **never type a slash command.** You just talk to Claude. Behind the scenes:
 
 - When you state a fact, decision, preference, or person worth remembering, the coworker captures it silently.
-- When you mention a project — by name, alias, or even a topical phrase like *"the Q3 launch"* — the coworker pulls that project's summary into context before answering.
-- Compaction and weekly review run **silently at session start** when they're due — no scheduled tasks, no cron, no manual setup. Claude handles them in the background while you start your day.
-- An optional **proactive heartbeat** quietly checks during your work hours for things worth flagging — dated follow-ups coming due, stale commitments, repeated patterns — and surfaces them at the top of your *next* session. Never interrupts; defaults to silence.
+- When you mention a project by name, alias, or even a topical phrase like *"the Q3 launch"*, the coworker pulls that project's summary into context before answering.
+- Compaction and weekly review run **silently at session start** when they're due: no scheduled tasks, no cron, no manual setup. Claude handles them in the background while you start your day.
+- An optional **proactive heartbeat** quietly checks during your work hours for things worth flagging, such as dated follow-ups coming due, stale commitments, repeated patterns. PACE agents then surface them at the top of your *next* session. Never interrupts; defaults to silence.
+
+**Note:** PACE is intended for Claude Cowork, but due to Cowork's flaky handling of plugins, I recommend using Claude Code in the Claude Desktop App as your interface. It'll give you the same basic experience and should just work.
 
 ### What it's *not*
 
@@ -43,7 +49,9 @@ It's built for **knowledge work** — research, marketing, planning, strategy, a
 
 ### Status
 
-v0.2.1 — beta. Targets **Claude Code** as the primary client (one-click plugin install, fully working). Cowork support exists but has a known regression in v0.2.0+ (see [Cowork status](#cowork-status) below). 230+ tests cover capture, search, compaction, review, the proactive heartbeat, and the MCP surface. Used daily by the maintainer. Mac dogfood pending; Windows + OneDrive is the primary target.
+v0.2.1 — beta. Targets **Claude Code** as the primary client (one-click plugin install, fully working). Cowork support exists but has a known techncial challenges to have Cowork recognize the MCP tools (see [Cowork status](#cowork-status) below). 
+
+230+ tests cover capture, search, compaction, review, the proactive heartbeat, and the MCP surface. Used daily by the maintainer. Mac dogfood pending; Windows + OneDrive is the primary target.
 
 ---
 

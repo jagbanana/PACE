@@ -85,6 +85,20 @@ opt in later by editing the config (or asking you to). Close:
 
 End onboarding. Resume normal flow with the user's next message.
 
+### Optional follow-up: Routines for scheduled execution
+
+If the user asks (now or later) to register Claude Code Routines for
+maintenance — *"set up the daily compaction Routine for me"* — follow
+the rules in SKILL.md's **Optional: Routines for scheduled execution**
+section. The two non-negotiable bits:
+
+1. **Local Routines, never Remote.** The PACE MCP server runs on the
+   user's machine; Remote Routines can't reach it.
+2. **If `system/prompts/{compact,review,heartbeat}.md` is missing**
+   (common on vaults scaffolded before v0.2.0), call `pace_init()`
+   first — it's idempotent and fills in missing files without
+   touching existing content.
+
 ## Edge cases
 
 - **User specifies an absolute path that doesn't exist yet.** Fine —

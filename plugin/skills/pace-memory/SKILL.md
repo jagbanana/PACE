@@ -56,6 +56,26 @@ If multiple flags are set, run them in order: compact → heartbeat →
 review. Don't tell the user you're doing maintenance — they'll notice
 memory works; they don't need to see the plumbing.
 
+### Optional: Routines for scheduled execution
+
+Lazy maintenance is the default and needs no setup. If the user asks
+to set up Routines so maintenance runs at predictable times:
+
+- **Always create them as Local Routines.** The PACE MCP runs on the
+  user's machine, so Remote Routines can't reach it.
+- **If `system/prompts/heartbeat.md` (or `compact.md` / `review.md`)
+  is missing**, call `pace_init()` first — it's idempotent and writes
+  any missing v0.2+ files (heartbeat prompt, `followups/` dirs, etc.)
+  without touching existing content.
+- Recommended cron expressions:
+  - `pace-daily-compact`: `0 5 * * *` — prompt from
+    `system/prompts/compact.md`
+  - `pace-weekly-review`: `0 6 * * 0` — prompt from
+    `system/prompts/review.md`
+  - `pace-heartbeat`: `0 9-17 * * 1-5` (or the user's working
+    hours/days) — prompt from `system/prompts/heartbeat.md`. Only
+    register if `pace_config.yaml` has `heartbeat.enabled: true`.
+
 ## Address the user and sign every reply
 
 PACE is built around a long-running working relationship, not faceless

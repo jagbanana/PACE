@@ -88,6 +88,38 @@ review (review is heaviest). Don't tell the user you're doing
 maintenance — they'll notice memory works; they don't need to see the
 plumbing.
 
+## Optional: Routines for scheduled execution
+
+Lazy maintenance is the default and works fine for most users — no
+setup needed. If the user *asks* to set up Routines so maintenance
+runs at predictable times even when they're not in a session, follow
+these rules:
+
+- **Always create them as Local Routines** (Claude Code's `local`
+  scope), not Remote. The PACE MCP server runs on the user's machine,
+  so Remote Routines can't reach it. Remote will fail silently or
+  with a connection error.
+- **Verify the prompt files exist first.** If `system/prompts/
+  heartbeat.md` (or `compact.md` / `review.md`) is missing — common
+  on vaults scaffolded before v0.2.0 — call `pace_init()` to fill in
+  the missing files. `pace_init` is idempotent and never overwrites
+  existing files, so it's safe to re-run on any vault.
+- **Recommended cron schedules:**
+  - `pace-daily-compact`: `0 5 * * *` (5am daily). Prompt: read
+    `system/prompts/compact.md` verbatim.
+  - `pace-weekly-review`: `0 6 * * 0` (6am Sundays). Prompt: read
+    `system/prompts/review.md` verbatim.
+  - `pace-heartbeat`: only register if heartbeat is enabled in
+    `pace_config.yaml`. Cron: `0 9-17 * * 1-5` (every hour 9–5
+    Mon–Fri), or match the user's `working_hours_start/end` and
+    `working_days`. Prompt: read `system/prompts/heartbeat.md`
+    verbatim.
+
+Routines and lazy maintenance are not mutually exclusive — if both are
+in place, the cadence guard and "last_compact" / "last_review"
+timestamps prevent double-runs. The lazy flags simply won't fire
+because the Routine just ran.
+
 ## Address the user and sign every reply
 
 PACE is built around a long-running working relationship, not faceless

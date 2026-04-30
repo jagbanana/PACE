@@ -4,6 +4,30 @@ All notable changes to PACE are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] — 2026-04-30
+
+### Added
+- **Optional Routines guidance.** Lazy in-session maintenance is still
+  the default and needs no setup, but if a user asks the model to
+  register Claude Code Routines for predictable timing, both the
+  CLAUDE.md template and the plugin SKILL.md now teach two
+  non-negotiable rules:
+  1. **Always create Local Routines, never Remote.** PACE's MCP runs
+     on the user's machine; Remote Routines can't reach it (they fail
+     silently or with a connection error).
+  2. **If `system/prompts/{compact,review,heartbeat}.md` is missing**
+     (common on vaults scaffolded before v0.2.0), call `pace_init()`
+     first — it's idempotent and fills in missing files without
+     touching existing content.
+
+  Recommended cron expressions are documented for all three Routines.
+
+### Changed
+- README: clarified positioning ("like OpenClaw, but as a
+  self-contained Claude Plugin"), restructured the "What PACE is" pitch,
+  added "Natural language onboarding, no technical configuration" to
+  the bullet list, refined the Cowork-vs-Claude-Code recommendation.
+
 ## [0.2.1] — 2026-04-29
 
 ### Changed
@@ -123,6 +147,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - 160+ tests covering capture, search, compaction, review, doctor,
   MCP surface, plugin packaging, and onboarding artifacts.
 
+[0.2.2]: https://github.com/jagbanana/PACE/releases/tag/v0.2.2
 [0.2.1]: https://github.com/jagbanana/PACE/releases/tag/v0.2.1
 [0.2.0]: https://github.com/jagbanana/PACE/releases/tag/v0.2.0
 [0.1.2]: https://github.com/jagbanana/PACE/releases/tag/v0.1.2
