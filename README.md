@@ -423,14 +423,27 @@ Three steps. Total time: under a minute, plus a Claude Desktop restart.
 2. **Open the Claude Desktop App** and go to **Customize → Browse Plugins → Personal → Upload Plugin**. Select the `.plugin` file you just downloaded.
 3. **Restart the Claude Desktop App.**
 
-That's it. Open any folder you want to be a PACE vault in **Claude Code**, start a session, and Claude will run the two-question onboarding automatically (your name + an optional nickname/emoji for the assistant). From then on, just talk.
-
 **Prerequisite:** [`uv`](https://docs.astral.sh/uv/) needs to be on your `PATH` so the plugin can run the bundled PACE source. Install with:
 
 - Windows (PowerShell): `irm https://astral.sh/uv/install.ps1 | iex`
 - macOS / Linux: `curl -LsSf https://astral.sh/uv/install.sh | sh`
 
 After installing `uv`, fully quit and relaunch the Claude Desktop App so the new `PATH` propagates.
+
+### Stand up your first vault
+
+The plugin doesn't auto-fire on every session — it loads when its skill description matches what you're asking for. So the first time you want to use PACE in a folder, you say so explicitly:
+
+1. **Open the folder** you want to use as your vault in **Claude Code** (any folder you'll come back to — typically somewhere in your Documents). The folder doesn't need to exist yet; Claude Code will create it when you point a new session there.
+
+   > **⚠️ Important:** when you start a new Claude Code session, **uncheck the "Use a worktree" option** near the folder picker. PACE writes to your real folder; a worktree creates a detached copy with a generated name (e.g. `musing-euler-61ae8f`) and your `.mcp.json` won't be present there, so the `pace_*` tools won't load. Same applies to every subsequent session in the vault — always start without a worktree.
+
+2. **Start a session** and say: **"Set up PACE."** *(Or: "Onboard me to PACE", "Make this a PACE vault" — anything that mentions PACE setup works.)*
+3. Claude runs a brief two-question onboarding (your name, an optional nickname/emoji for the assistant). It scaffolds the vault on disk and writes a `CLAUDE.md` at the root.
+
+From then on, that folder is a PACE vault. Future sessions in it auto-detect on their own — Claude Code reads the in-vault `CLAUDE.md` at session start, which tells the model to call `pace_status` and ground its replies in your accumulated memory. No more trigger phrase needed; just talk. (Just remember: every session, "Use a worktree" stays unchecked.)
+
+**Already-set-up vaults**: just open the folder (worktree off). The auto-detection above kicks in. No "Set up PACE" needed.
 
 ### Cowork status
 
