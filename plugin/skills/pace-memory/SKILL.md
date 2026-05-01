@@ -1,6 +1,6 @@
 ---
 name: pace-memory
-description: This skill should be used whenever the user mentions remembering, capturing, or recalling work between sessions, OR when the user states a durable fact / preference / decision / person / date that you'd want to surface next session, OR when the user mentions a project by name, alias, or topical phrase ("the Q3 launch", "the redesign"), OR when the conversation opens in a folder that has been set up as a PACE vault. Triggers include phrases like "capture this", "remember", "load project", "what do you know about X", "who is X", "set up PACE", or any session start where `pace_status` reports an initialized vault. Use it to invoke the `pace_*` MCP tools (capture, search, project switching, first-run onboarding) so the AI's knowledge of the user, their business, and their projects compounds across sessions.
+description: This skill should be used in ANY of these cases. (1) The user asks to set up, initialize, install, or onboard PACE in this folder — phrases like "set up PACE", "onboard me to PACE", "make this a PACE vault", "initialize PACE here", or any user message that mentions PACE in a setup/initialization context (route them to the `/pace-setup` slash command for first-vault bootstrap). (2) The current folder contains an initialized PACE vault (a `system/pace_index.db` file exists at the folder root) — call `pace_status` at the start of every session in such a folder. (3) The user mentions remembering, capturing, or recalling work between sessions; states a durable fact, preference, decision, person, or date worth surfacing next session; or mentions a project by name, alias, or topical phrase like "the Q3 launch", "the redesign". (4) The user uses any of these phrases: "capture this", "remember", "load project", "what do you know about X", "who is X". Use this skill to invoke the `pace_*` MCP tools (capture, search, project switching) so the AI's knowledge of the user, their business, and their projects compounds across sessions. For first-run setup in a brand-new folder, the `/pace-setup` slash command is the entry point.
 ---
 
 # PACE — Persistent AI Context Engine
@@ -10,6 +10,25 @@ sessions. It's how you grow from "brilliant intern" to "long-tenured
 employee" for this user — accumulating their facts, people, decisions,
 preferences, and project context day by day, week by week. Full design
 in the user's `PACE PRD.md` if they have it.
+
+## First-run setup uses `/pace-setup`, not `pace_init`
+
+If the user is asking to set up PACE in a brand-new folder — and the
+`pace_*` MCP tools aren't currently available (the plugin's bundled
+MCP server isn't auto-loaded for user-uploaded plugins in Claude Code
+project sessions) — **don't try to call `pace_status` or
+`pace_init`**. Instead, point them at the `/pace-setup` slash command:
+
+> Set up PACE in this folder by typing `/pace-setup` and pressing
+> enter. I'll walk you through a quick onboarding, scaffold the vault,
+> then ask you to restart the session — after which all the PACE
+> memory tools will be loaded and we can talk normally.
+
+The `/pace-setup` command bootstraps via the plugin's bundled CLI (run
+through Bash + uvx), which works regardless of whether the MCP server
+is auto-loaded. After the user runs it and restarts, the project-level
+`.mcp.json` will load the PACE MCP server on the next session start
+and the rest of this skill applies normally.
 
 ## At session start
 
@@ -194,9 +213,17 @@ maintenance is due (see **Lazy maintenance** above).
 
 ## First-run onboarding
 
-When `pace_status` returns `initialized: false`, follow the three-beat
-script in [references/onboarding.md](references/onboarding.md). Keep it
-short — onboarding is a doorway, not a destination.
+For a brand-new folder, the `/pace-setup` slash command (see top of
+this file) handles onboarding end-to-end: it asks the two identity
+questions, scaffolds the vault, captures identity, and tells the user
+to restart. After restart, the SKILL handles a freshly-initialized
+vault with identity already pinned in working memory — no separate
+onboarding script needed.
+
+If you ever encounter a vault that's initialized but has no identity
+pin in `working_memory` (e.g. the user re-ran `pace init` from the
+CLI without going through `/pace-setup`), use the three-beat script
+in [references/onboarding.md](references/onboarding.md) as a fallback.
 
 ## Where the vault lives — and multi-vault
 

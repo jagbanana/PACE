@@ -65,7 +65,7 @@ Behind the scenes:
 
 ### Status
 
-v0.3.0 — beta. Targets **Claude Code** as the primary client (one-click plugin install, fully working). Multiple PACE agents per machine (one per folder) supported as of 0.3.0. Cowork support exists but has known technical challenges getting Cowork to recognize the MCP tools (see [Cowork status](#cowork-status) below).
+v0.3.1 — beta. Targets **Claude Code** as the primary client. Multiple PACE agents per machine (one per folder) supported as of 0.3.0; first-vault setup via the `/pace-setup` slash command as of 0.3.1. Cowork support exists but has known technical challenges getting Cowork to recognize the MCP tools (see [Cowork status](#cowork-status) below).
 
 230+ tests cover capture, search, compaction, review, the proactive heartbeat, multi-vault resolution, and the MCP surface. Used daily by the maintainer. Mac dogfood pending; Windows + OneDrive is the primary target.
 
@@ -448,13 +448,14 @@ After installing `uv`, fully quit and relaunch the Claude Desktop App so the new
 ### Stand up your first vault
 
 1. In **Claude Code**, open the folder you want to use as your vault — typically somewhere in your Documents. **Uncheck "Use a worktree"** near the folder picker; PACE writes to the folder you opened, and a worktree detaches the session into a generated copy where the vault won't load.
-2. Say **"Set up PACE."** Claude runs a quick two-question onboarding (your name; an optional nickname/emoji for the assistant), scaffolds the vault on disk, and writes a `CLAUDE.md` at the root.
+2. Type **`/pace-setup`** and press enter. Claude asks you a short onboarding (your name; an optional nickname/emoji for the assistant; what you'll use this folder for), scaffolds the vault on disk, captures your identity, and asks you to restart the session.
+3. **Restart the Claude Code session** in the same folder (worktree still off). On restart, the project-level `.mcp.json` written by `/pace-setup` is loaded by Claude Code, the PACE MCP tools come online, and from then on **just talk** — Claude handles remembering for you. No trigger phrase needed; the in-vault `CLAUDE.md` keeps PACE active automatically.
 
-That's it. Future sessions in that folder auto-detect via the in-vault `CLAUDE.md` — no trigger phrase needed, just talk.
+`/pace-setup` is the only non-natural-language step you'll ever type. It exists because the plugin's bundled MCP server doesn't always auto-load on the *first* session in a brand-new folder when the plugin was installed via "Upload Plugin"; `/pace-setup` sidesteps that by invoking the bundled CLI directly. After the restart, everything is conversational.
 
 ### Multiple PACE agents
 
-Repeat the steps above in a different folder to stand up another agent. Each lives in its own folder, with its own name, personality, and memory; they don't share context. A common layout:
+Repeat the steps above in a different folder to stand up another agent (open the new folder, `/pace-setup`, restart). Each lives in its own folder with its own name, personality, and memory; they don't share context. A common layout:
 
 ```
 ~/Documents/agents/

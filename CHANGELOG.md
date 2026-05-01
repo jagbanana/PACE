@@ -4,6 +4,30 @@ All notable changes to PACE are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] — 2026-05-01
+
+### Added
+- **`/pace-setup` slash command** for first-vault bootstrap. Real-world
+  install path: open a folder in Claude Code → type `/pace-setup` →
+  answer two onboarding questions → restart the session → done. The
+  command runs the plugin's bundled CLI through Bash + uvx, which
+  works even when Claude Code's plugin runtime hasn't auto-loaded the
+  plugin's MCP server (a known lifecycle quirk for plugins installed
+  via "Upload Plugin"). After the restart, the project-level
+  `.mcp.json` written by `pace init` loads PACE normally and from
+  then on the user just talks.
+
+### Changed
+- **SKILL.md description broadened.** First-vault setup phrases like
+  "set up PACE", "onboard me to PACE", "make this a PACE vault",
+  "initialize PACE here" now trigger the skill cleanly even in a
+  brand-new folder where none of the existing-vault triggers apply.
+  The skill now routes those requests at `/pace-setup` instead of
+  trying to call `pace_init` (which fails when the MCP server isn't
+  loaded).
+- **README onboarding** updated to lead with `/pace-setup` as the
+  one non-natural-language step. Status bumped to v0.3.1.
+
 ## [0.3.0] — 2026-05-01
 
 ### Added
@@ -175,6 +199,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - 160+ tests covering capture, search, compaction, review, doctor,
   MCP surface, plugin packaging, and onboarding artifacts.
 
+[0.3.1]: https://github.com/jagbanana/PACE/releases/tag/v0.3.1
 [0.3.0]: https://github.com/jagbanana/PACE/releases/tag/v0.3.0
 [0.2.2]: https://github.com/jagbanana/PACE/releases/tag/v0.2.2
 [0.2.1]: https://github.com/jagbanana/PACE/releases/tag/v0.2.1

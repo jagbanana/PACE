@@ -178,6 +178,40 @@ def test_onboarding_reference_doc_exists() -> None:
     assert "Beat 3" not in text
 
 
+# ---- commands --------------------------------------------------------
+
+
+def test_pace_setup_command_present() -> None:
+    """`/pace-setup` is the first-vault entry point shipped in v0.3.1.
+    Without this command, real-world users can't bootstrap a vault when
+    the plugin's MCP server isn't auto-loaded by Claude Code."""
+    cmd = PLUGIN_ROOT / "commands" / "pace-setup.md"
+    assert cmd.is_file(), "plugin/commands/pace-setup.md must exist"
+
+
+def test_pace_setup_command_has_frontmatter_and_uses_bundled_cli() -> None:
+    """The command must (a) declare a description so it shows up in `/`
+    autocomplete, (b) restrict tools to Bash so the model can't drift
+    into MCP-tool territory before the restart, and (c) actually invoke
+    the bundled CLI via uvx — that's the whole reason this slash
+    command exists (sidestepping the MCP-not-loaded issue)."""
+    text = (PLUGIN_ROOT / "commands" / "pace-setup.md").read_text(encoding="utf-8")
+    assert text.startswith("---\n")
+    assert "description:" in text
+    assert '"Bash"' in text or "'Bash'" in text
+    # The whole point: use uvx against the bundled server source.
+    assert 'uvx --from "${CLAUDE_PLUGIN_ROOT}/server" pace init' in text
+    assert 'uvx --from "${CLAUDE_PLUGIN_ROOT}/server" pace capture' in text
+
+
+def test_pace_setup_command_tells_user_to_restart() -> None:
+    """The post-bootstrap restart is non-negotiable — without it the
+    project-level .mcp.json doesn't load and PACE tools stay missing.
+    The command must include this explicitly in its instructions."""
+    text = (PLUGIN_ROOT / "commands" / "pace-setup.md").read_text(encoding="utf-8")
+    assert "restart" in text.lower()
+
+
 # ---- system-prompts --------------------------------------------------
 
 
