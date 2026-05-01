@@ -1,25 +1,28 @@
 """Per-user vault location config.
 
-When PACE runs as a Cowork plugin, the MCP server is launched once
-globally and has no out-of-band way to know which folder is the user's
-vault. This module is the resolution-of-record:
+PACE supports **multiple vaults on the same machine**, each living in
+its own folder. The resolution chain that picks "which vault are we
+talking to right now" runs in :func:`pace.paths.find_vault_root`; this
+module owns the env-var + persisted-config pieces of it.
 
-Resolution order (first hit wins):
+Pieces this module contributes (in priority order, first hit wins):
 
-1. ``PACE_ROOT`` env var — manual escape hatch, takes precedence so
-   the developer/user can always override.
-2. ``CLAUDE_PLUGIN_OPTION_VAULT_ROOT`` env var — Cowork sets this if
-   the user filled in the ``userConfig`` field at install time.
+1. ``PACE_ROOT`` env var — strongest signal. Each initialized vault's
+   per-vault ``.mcp.json`` bakes ``PACE_ROOT`` into the MCP server's
+   environment, so opening that folder in Claude Code always pins the
+   server to that vault.
+2. ``CLAUDE_PLUGIN_OPTION_VAULT_ROOT`` env var — Cowork sets this when
+   the user fills in the ``userConfig`` field at install time.
 3. ``vault_root`` field in the user config file
    (``%APPDATA%\\pace\\config.json`` on Windows,
-   ``~/.config/pace/config.json`` elsewhere) — written by
-   ``pace_init`` so onboarding only has to ask once.
-4. ``None`` — server returns ``initialized: false`` and the SKILL
-   walks the user through ``pace_init(root=...)``.
+   ``~/.config/pace/config.json`` elsewhere) — a "default vault" used
+   only by the CLI when invoked from a folder that isn't itself a
+   vault. The MCP server **does not** consult this file (see
+   :func:`pace.paths.find_vault_root`); it would otherwise leak vault
+   identity across folders.
 
-The CLI and MCP write the same file via :func:`set_vault_root`, so
-power users running ``pace init`` and Cowork-driven model invocations
-end up in the same state.
+The MCP server passes ``use_user_config=False`` to keep multi-vault
+sessions strictly bound to the folder Claude Code opened.
 """
 
 from __future__ import annotations
@@ -64,12 +67,20 @@ def user_config_path() -> Path:
     return base / "pace" / CONFIG_FILENAME
 
 
-def resolve_vault_root() -> Path | None:
+def resolve_vault_root(*, use_user_config: bool = True) -> Path | None:
     """Return the vault root per the resolution order documented above.
 
+    Args:
+        use_user_config: When ``False``, skip the ``%APPDATA%`` /
+            ``~/.config`` config file. The MCP server passes ``False``
+            so that a session opened in folder *A* never resolves to
+            vault *B* just because *B* was the most-recently-initialized
+            vault on this machine. The CLI keeps the default ``True``
+            so ``pace status`` from any directory still works.
+
     Returns ``None`` when no signal points at a vault. Callers that
-    require a vault (the MCP server's tool functions) treat this as
-    "uninitialized" and surface that to the model.
+    require a vault treat this as "uninitialized" and surface that to
+    the model (or the user, in CLI invocations).
     """
     for key in (_ENV_PACE_ROOT, _ENV_PLUGIN_OPTION):
         raw = os.environ.get(key)
@@ -77,9 +88,10 @@ def resolve_vault_root() -> Path | None:
             candidate = Path(raw).expanduser().resolve()
             return candidate
 
-    cfg = read_config()
-    if cfg and cfg.get("vault_root"):
-        return Path(cfg["vault_root"]).expanduser().resolve()
+    if use_user_config:
+        cfg = read_config()
+        if cfg and cfg.get("vault_root"):
+            return Path(cfg["vault_root"]).expanduser().resolve()
 
     return None
 
@@ -97,12 +109,36 @@ def read_config() -> dict | None:
         return None
 
 
+def set_vault_root_if_unset(root: Path) -> tuple[Path, bool]:
+    """Write ``root`` as the default vault **only if no default is set**.
+
+    Multi-vault use: when the user runs ``pace init`` to create a
+    *second* vault, we don't want that init to overwrite the
+    user-config pointer to their *first* vault — doing so would
+    break ``pace status`` invocations in unrelated folders that were
+    relying on the original default.
+
+    Returns ``(config_path, wrote)`` so callers can tell whether the
+    file was actually changed.
+    """
+    target_path = user_config_path()
+    existing = read_config() or {}
+    if existing.get("vault_root"):
+        return target_path, False
+    return set_vault_root(root), True
+
+
 def set_vault_root(root: Path) -> Path:
     """Persist ``root`` as the user's vault location.
 
     Writes ``vault_root`` to the per-user config file, creating
     parent dirs as needed. Returns the config-file path so callers
     can mention it in user-facing output.
+
+    For first-time use this captures the new vault as the CLI's
+    default. Subsequent ``pace init`` calls should use
+    :func:`set_vault_root_if_unset` instead so a second vault doesn't
+    silently steal the first vault's slot in the user config.
     """
     target_path = user_config_path()
     target_path.parent.mkdir(parents=True, exist_ok=True)

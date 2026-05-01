@@ -206,11 +206,13 @@ def init(root: Path) -> InitResult:
     git_initialized = _maybe_git_init(root)
 
     # Per-user config --------------------------------------------------
-    # Record the vault location so the plugin-launched MCP server can
-    # find this folder on subsequent starts without an env var. Same
-    # write happens whether init was called from the CLI or the
-    # pace_init MCP tool.
-    user_config_path = pace_config.set_vault_root(root)
+    # Record this vault as the CLI's default *only* if no default is
+    # already set. PACE supports multiple vaults on the same machine —
+    # initializing a second vault must not silently overwrite the
+    # first vault's slot in %APPDATA%\pace\config.json (that file is
+    # only used by the CLI as a fallback when invoked from a folder
+    # that isn't part of any vault; the MCP server doesn't consult it).
+    user_config_path, _ = pace_config.set_vault_root_if_unset(root)
 
     # If we just created the working_memory file, register it in the
     # freshly-built index so the first ``pace status`` reflects reality.

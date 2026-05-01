@@ -20,9 +20,14 @@ is no logic duplication. Tool descriptions are written to drive correct
 invocation; the model reads them every session, so they earn their
 tokens.
 
-The vault root is resolved via ``find_vault_root`` (which honors the
-``PACE_ROOT`` env var). Cowork's ``.mcp.json`` is expected to set
-``PACE_ROOT`` to the vault path; see ``pace.vault`` for the template.
+The vault root is resolved via ``find_vault_root`` with the user-config
+fallback **disabled**: the MCP server is bound to whatever folder
+Claude Code opened (cwd walk-up) plus any explicit ``PACE_ROOT`` env
+the per-vault ``.mcp.json`` injected. We deliberately skip the
+``%APPDATA%\\pace\\config.json`` "default vault" pointer so that
+opening a brand-new folder to set up a *second* PACE agent doesn't
+leak the *first* vault's identity into the new session. See
+``pace.paths.find_vault_root`` for the full chain.
 """
 
 from __future__ import annotations
@@ -69,8 +74,16 @@ mcp = FastMCP("PACE")
 
 
 def _initialized_root() -> Path | None:
-    """Return the vault root iff it exists and is initialized."""
-    root = find_vault_root()
+    """Return the vault root iff it exists and is initialized.
+
+    ``use_user_config=False`` keeps the MCP server bound to the folder
+    Claude Code opened (via cwd walk-up + ``PACE_ROOT`` env). This is
+    what makes multiple PACE agents in different folders safe — a
+    session opened in ``Bob/`` will never resolve to ``Misa/`` just
+    because Misa happens to be the CLI's default-vault pointer in
+    ``%APPDATA%\\pace\\config.json``.
+    """
+    root = find_vault_root(use_user_config=False)
     if root is None or not is_initialized(root):
         return None
     return root
@@ -217,7 +230,8 @@ def pace_status() -> dict[str, Any]:
 
     Example: ``pace_status()`` — no arguments.
     """
-    root = find_vault_root()
+    # use_user_config=False: see _initialized_root() for rationale.
+    root = find_vault_root(use_user_config=False)
     if root is None or not is_initialized(root):
         return {
             "initialized": False,

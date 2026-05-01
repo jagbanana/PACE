@@ -198,13 +198,21 @@ When `pace_status` returns `initialized: false`, follow the three-beat
 script in [references/onboarding.md](references/onboarding.md). Keep it
 short — onboarding is a doorway, not a destination.
 
-## Where the vault lives
+## Where the vault lives — and multi-vault
 
-The MCP server resolves the vault root automatically via a per-user
-config file (`%APPDATA%\pace\config.json` on Windows,
-`~/.config/pace/config.json` elsewhere). The plugin's `userConfig` lets
-the user pre-fill the vault path at install time; otherwise onboarding
-asks them where to put it and `pace_init(root=...)` writes the config.
+The MCP server is bound to **the folder the user opened in Claude
+Code**. Each PACE vault is a self-contained folder; PACE supports as
+many vaults as the user wants on the same machine, each in its own
+folder. After `pace_init` runs in a folder, that folder becomes a
+vault: a per-vault `.mcp.json` is written that pins `PACE_ROOT` to the
+folder, so future sessions opened there always resolve to the correct
+vault.
+
+For first-run onboarding in a brand-new folder (no `.mcp.json` yet),
+`pace_status` returns `initialized: false` and `pace_init()` (no `root`
+argument) initializes the **current folder** — i.e., whatever the user
+opened in Claude Code. Don't pass an explicit path unless the user
+asked for a different one.
 
 If the user ever asks "what are you saving about me?", point them at
 `/memories/long_term/` inside their vault — everything is human-readable

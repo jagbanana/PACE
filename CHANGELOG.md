@@ -4,6 +4,34 @@ All notable changes to PACE are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] — 2026-05-01
+
+### Added
+- **Multi-vault support.** PACE now supports multiple agents on the
+  same machine, each living in its own folder with its own memory.
+  Stand up `~/agents/Misa` for marketing work, `~/agents/Bob` for
+  research, etc.; opening a folder in Claude Code resolves to that
+  folder's vault. The README documents the workflow under "Multiple
+  PACE agents".
+
+### Changed
+- **Vault resolution chain reordered.** The cwd walk-up now beats the
+  per-user config file (`%APPDATA%\pace\config.json` /
+  `~/.config/pace/config.json`) so multi-vault sessions stay scoped
+  to the folder Claude Code opened. The MCP server skips the
+  per-user config entirely (`use_user_config=False`) — that file is
+  CLI-only now, used as a "default vault when invoked from a folder
+  that isn't part of any vault" fallback.
+- **`pace init` no longer overwrites the per-user config** when a
+  default is already set. New helper `set_vault_root_if_unset` makes
+  initializing a *second* vault leave the *first* vault's
+  CLI-default pointer alone. First init still seeds the pointer so
+  `pace status` from any directory hits a sane default.
+- **Plugin author** changed from "Justin Gesso" to "jaglab".
+- **README** gains a top-of-page jump-to-Install link, advertises
+  multi-agent support, and streamlines the "Stand up your first
+  vault" section.
+
 ## [0.2.2] — 2026-04-30
 
 ### Added
@@ -147,6 +175,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - 160+ tests covering capture, search, compaction, review, doctor,
   MCP surface, plugin packaging, and onboarding artifacts.
 
+[0.3.0]: https://github.com/jagbanana/PACE/releases/tag/v0.3.0
 [0.2.2]: https://github.com/jagbanana/PACE/releases/tag/v0.2.2
 [0.2.1]: https://github.com/jagbanana/PACE/releases/tag/v0.2.1
 [0.2.0]: https://github.com/jagbanana/PACE/releases/tag/v0.2.0

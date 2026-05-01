@@ -115,6 +115,57 @@ def test_clear_vault_root_removes_field(tmp_path: Path) -> None:
     assert pace_config.resolve_vault_root() is None
 
 
+# ---- use_user_config flag (multi-vault) ------------------------------
+
+
+def test_resolve_with_use_user_config_false_skips_config_file(
+    tmp_path: Path,
+) -> None:
+    """The MCP server passes use_user_config=False so a session opened in
+    one folder never resolves to a different vault via the APPDATA
+    pointer. Without env vars set, resolve must return None even if the
+    config file holds a vault_root."""
+    pace_config.set_vault_root(tmp_path / "from-config")
+    assert pace_config.resolve_vault_root(use_user_config=False) is None
+
+
+def test_resolve_with_use_user_config_false_still_honors_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Env vars are the strongest signal regardless of use_user_config —
+    they're how per-vault .mcp.json files pin sessions to the right
+    vault."""
+    pace_config.set_vault_root(tmp_path / "from-config")
+    monkeypatch.setenv("PACE_ROOT", str(tmp_path / "explicit"))
+    resolved = pace_config.resolve_vault_root(use_user_config=False)
+    assert resolved == (tmp_path / "explicit").resolve()
+
+
+# ---- set_vault_root_if_unset (multi-vault) ---------------------------
+
+
+def test_set_vault_root_if_unset_writes_when_empty(tmp_path: Path) -> None:
+    """First-time init must seed the user-config so CLI invocations from
+    other folders find a sensible default."""
+    path, wrote = pace_config.set_vault_root_if_unset(tmp_path / "first")
+    assert wrote is True
+    assert path.is_file()
+    assert pace_config.resolve_vault_root() == (tmp_path / "first").resolve()
+
+
+def test_set_vault_root_if_unset_preserves_existing(tmp_path: Path) -> None:
+    """Initializing a *second* vault must not overwrite the user-config
+    pointer to the first. Otherwise the second init would silently
+    steal the CLI default and break ``pace status`` from unrelated
+    folders that depended on the first vault."""
+    pace_config.set_vault_root(tmp_path / "first")
+    path, wrote = pace_config.set_vault_root_if_unset(tmp_path / "second")
+    assert wrote is False
+    assert path.is_file()
+    # Default still points at the first vault.
+    assert pace_config.resolve_vault_root() == (tmp_path / "first").resolve()
+
+
 # ---- vault.init writes the config ------------------------------------
 
 
@@ -133,3 +184,17 @@ def test_vault_init_records_vault_path_in_user_config(tmp_path: Path) -> None:
     # Resolution finds it without any env var set.
     resolved = pace_config.resolve_vault_root()
     assert resolved == vault_root.resolve()
+
+
+def test_vault_init_does_not_overwrite_existing_default(tmp_path: Path) -> None:
+    """Initializing a second vault must leave the user-config pointer to
+    the first vault alone — otherwise multi-vault setups break."""
+    from pace import vault as vault_ops
+
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    vault_ops.init(first)
+    vault_ops.init(second)
+
+    # The user-config still points at the first vault.
+    assert pace_config.resolve_vault_root() == first.resolve()

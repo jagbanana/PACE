@@ -8,6 +8,8 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![Status: Beta](https://img.shields.io/badge/status-beta-orange.svg)](#status)
 
+**[→ Jump to Install](#install)**
+
 ---
 
 ## What PACE is — your evolving Claude coworker
@@ -19,6 +21,7 @@ PACE solves that.
 It lets you stand up **individual, named coworkers**, each with its own personality and its own persistent memory. PACE agents mature from intern, to junior, to senior over the course of weeks of real work.
 
 - Installs as a single Claude Desktop App plugin — upload one file and you're done
+- **Run multiple PACE agents on the same machine** — one folder per agent, each with its own name, personality, and persistent memory
 - Each PACE agent can handle multiple projects, just like real humans
 - Natural language onboarding, no technical configuration
 - Learns your work style, preferences, and project details, evolving to you and the job
@@ -28,11 +31,24 @@ It lets you stand up **individual, named coworkers**, each with its own personal
 - Performs its own maintenance, staying performant via indexing and linking
 - Everything is human-readable via Obsidian
 
-The model behind it is the human one: each PACE coworker handles 3–4 projects for you, just like a real employee, and you bring them up the curve over time. Each has a name, an emoji, and a voice; each remembers the last conversation, the last decision, and why you made it.
+The model behind it is the human one: each PACE coworker handles 3–4 projects for you, just like a real employee, and you bring them up the curve over time. Each has a name, an emoji, and a voice; each remembers the last conversation, the last decision, and why you made it. You can stand up several at once — one per folder, each with its own scope (e.g. `~/agents/Misa` for marketing work, `~/agents/Bob` for research) — and they stay completely separate.
 
 PACE provides the core **persistent-agent capabilities** you'd find in projects like OpenClaw, but packaged as a Claude Code plugin and aimed at mature, day-to-day business use rather than experimental tinkering. The vault is plain Markdown on your local disk, the storage is human-readable and grep-able, and nothing is hidden from you.
 
-It's built for **knowledge work** — research, marketing, planning, strategy, anything multi-week. You **never type a slash command.** You just talk to Claude. Behind the scenes:
+### Business use cases
+
+It's built for **knowledge work** — research, marketing, planning, strategy, anything multi-week. You **never type a slash command.** You just talk to Claude. 
+
+Examples include:
+
+1. **Support and ticket resolution:** link your PACE agent to KB and system tools via MCP. It improve on its ability to resolve issues, learn how to escalate issues, and enhance your KB over time.
+2. **Marketing and research:** provide your PACE agent style guides, target audience information, and website & analytics access. It can build and execute on content plans, manage SEO, and more. Based on real-world feedback, it can learn, adjust, and apply continuous improvement.
+3. **Project management:** enable Obsidian plugins to visually manage workflows. Your PACE agent learns stakeholders, common dependencies, and structural risks. It can anticipate problems and proactively gather status from team members via connected channels.
+4. **Ends with your imagination:** just like OpenClaw, PACE use cases are wide open and limited to your imagination. Not sure how to best use PACE? Setup a PACE agent specifically to brainstorm ideas. Discuss what you aren't good at, where you need help, and what you don't like doing. Let agents help you work more effectively and efficienctly!
+
+It is recommended to make one PACE agent per role (or per major use case), though each agent can handle multple projects.
+
+Behind the scenes:
 
 - When you state a fact, decision, preference, or person worth remembering, the coworker captures it silently.
 - When you mention a project by name, alias, or even a topical phrase like *"the Q3 launch"*, the coworker pulls that project's summary into context before answering.
@@ -49,9 +65,9 @@ It's built for **knowledge work** — research, marketing, planning, strategy, a
 
 ### Status
 
-v0.2.1 — beta. Targets **Claude Code** as the primary client (one-click plugin install, fully working). Cowork support exists but has a known techncial challenges to have Cowork recognize the MCP tools (see [Cowork status](#cowork-status) below). 
+v0.3.0 — beta. Targets **Claude Code** as the primary client (one-click plugin install, fully working). Multiple PACE agents per machine (one per folder) supported as of 0.3.0. Cowork support exists but has known technical challenges getting Cowork to recognize the MCP tools (see [Cowork status](#cowork-status) below).
 
-230+ tests cover capture, search, compaction, review, the proactive heartbeat, and the MCP surface. Used daily by the maintainer. Mac dogfood pending; Windows + OneDrive is the primary target.
+230+ tests cover capture, search, compaction, review, the proactive heartbeat, multi-vault resolution, and the MCP surface. Used daily by the maintainer. Mac dogfood pending; Windows + OneDrive is the primary target.
 
 ---
 
@@ -401,17 +417,16 @@ If `pace_load_project` returns an error (typo, ambiguous reference), the model c
 The MCP server figures out which vault to talk to via this chain (first hit wins):
 
 ```
-   1. PACE_ROOT env var                                   ← debugging
-   2. CLAUDE_PLUGIN_OPTION_VAULT_ROOT env var             ← plugin userConfig
-   3. Per-user config file:
-        Windows:   %APPDATA%\pace\config.json
-        macOS/Lx:  ~/.config/pace/config.json
-   4. Walk up from cwd looking for system/pace_index.db   ← Claude Code workflow
-   5. None of the above → pace_status returns
-        initialized: false → onboarding picks a path
+   1. PACE_ROOT env var                                   ← per-vault .mcp.json
+   2. CLAUDE_PLUGIN_OPTION_VAULT_ROOT env var             ← Cowork userConfig
+   3. Walk up from cwd looking for system/pace_index.db   ← folder you opened
+   4. None of the above → pace_status returns
+        initialized: false → onboarding picks the cwd
 ```
 
-This is why a single PACE install can serve every project: the vault location is set once, in step 2 or 3, and survives restarts.
+This is what makes **multi-agent** safe. Each initialized vault writes its own `.mcp.json` pinning `PACE_ROOT` to itself, so opening `~/agents/Misa` always resolves to Misa and opening `~/agents/Bob` always resolves to Bob. For a brand-new folder with no `.mcp.json` yet, the cwd walk-up fails, `pace_status` returns `initialized: false`, and onboarding initializes the folder you opened.
+
+The CLI uses the same chain plus a fourth step — `%APPDATA%\pace\config.json` (Windows) or `~/.config/pace/config.json` — as a fallback so `pace status` from any directory hits a sane default. The MCP server skips that step on purpose, so a session opened in one folder can never leak another vault's identity.
 
 ---
 
@@ -432,18 +447,23 @@ After installing `uv`, fully quit and relaunch the Claude Desktop App so the new
 
 ### Stand up your first vault
 
-The plugin doesn't auto-fire on every session — it loads when its skill description matches what you're asking for. So the first time you want to use PACE in a folder, you say so explicitly:
+1. In **Claude Code**, open the folder you want to use as your vault — typically somewhere in your Documents. **Uncheck "Use a worktree"** near the folder picker; PACE writes to the folder you opened, and a worktree detaches the session into a generated copy where the vault won't load.
+2. Say **"Set up PACE."** Claude runs a quick two-question onboarding (your name; an optional nickname/emoji for the assistant), scaffolds the vault on disk, and writes a `CLAUDE.md` at the root.
 
-1. **Open the folder** you want to use as your vault in **Claude Code** (any folder you'll come back to — typically somewhere in your Documents). The folder doesn't need to exist yet; Claude Code will create it when you point a new session there.
+That's it. Future sessions in that folder auto-detect via the in-vault `CLAUDE.md` — no trigger phrase needed, just talk.
 
-   > **⚠️ Important:** when you start a new Claude Code session, **uncheck the "Use a worktree" option** near the folder picker. PACE writes to your real folder; a worktree creates a detached copy with a generated name (e.g. `musing-euler-61ae8f`) and your `.mcp.json` won't be present there, so the `pace_*` tools won't load. Same applies to every subsequent session in the vault — always start without a worktree.
+### Multiple PACE agents
 
-2. **Start a session** and say: **"Set up PACE."** *(Or: "Onboard me to PACE", "Make this a PACE vault" — anything that mentions PACE setup works.)*
-3. Claude runs a brief two-question onboarding (your name, an optional nickname/emoji for the assistant). It scaffolds the vault on disk and writes a `CLAUDE.md` at the root.
+Repeat the steps above in a different folder to stand up another agent. Each lives in its own folder, with its own name, personality, and memory; they don't share context. A common layout:
 
-From then on, that folder is a PACE vault. Future sessions in it auto-detect on their own — Claude Code reads the in-vault `CLAUDE.md` at session start, which tells the model to call `pace_status` and ground its replies in your accumulated memory. No more trigger phrase needed; just talk. (Just remember: every session, "Use a worktree" stays unchecked.)
+```
+~/Documents/agents/
+├── Misa/        ← marketing coworker
+├── Bob/         ← research coworker
+└── Ada/         ← strategy coworker
+```
 
-**Already-set-up vaults**: just open the folder (worktree off). The auto-detection above kicks in. No "Set up PACE" needed.
+Open whichever folder matches the work you're doing today; that agent's memory loads automatically.
 
 ### Cowork status
 
