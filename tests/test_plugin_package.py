@@ -124,6 +124,28 @@ def test_skill_has_yaml_frontmatter_with_required_fields() -> None:
     assert "description:" in text
 
 
+def test_skill_description_under_marketplace_char_limit() -> None:
+    """Anthropic's marketplace validator caps `description` at 1024
+    characters; uploads exceeding that are rejected with
+    `Plugin validation failed. Skill 'skills/pace-memory': field
+    'description' in SKILL.md must be at most 1024 characters`. The
+    field is broad enough that we keep brushing against it — this
+    guard makes overruns fail in CI instead of at upload time."""
+    text = _skill_text()
+    for line in text.splitlines():
+        if line.startswith("description:"):
+            # Strip the YAML key but count everything after, including
+            # the value. The validator counts the description value, so
+            # use the raw line minus the key prefix as a safe overestimate.
+            value = line[len("description:"):].strip()
+            assert len(value) <= 1024, (
+                f"SKILL.md description is {len(value)} chars (>{1024} limit). "
+                "Trim before any marketplace upload — see CHANGELOG/v0.3.5."
+            )
+            return
+    raise AssertionError("description: line not found in SKILL.md")
+
+
 def test_skill_lists_every_pace_mcp_tool() -> None:
     """The model uses SKILL.md to know which tools exist; missing one
     means the model won't reach for it."""
@@ -152,6 +174,45 @@ def test_skill_carries_address_and_sign_rule() -> None:
     assert "Address the user and sign every reply" in text
     assert "Sign at the bottom" in text
     assert "Vary the opener" in text or "vary the" in text.lower()
+
+
+def test_skill_contains_inline_first_vault_bootstrap_recipe() -> None:
+    """The skill must carry a self-contained bootstrap recipe so that
+    a brand-new folder where the plugin's MCP server isn't yet loaded
+    can still be initialized via Bash + uv. We can't rely on the
+    `/pace-memory:pace-setup` slash command pipeline alone — slash
+    commands from user-uploaded plugins are fragile in current Claude
+    Code, and the skill route is the proven primary path.
+
+    Critical details encoded by these asserts:
+
+    1. Plugin-path discovery uses a glob over ``~/.claude/plugins/
+       marketplaces/*/pace-memory``, not a literal
+       ``${CLAUDE_PLUGIN_ROOT}`` (which Claude Code does NOT substitute
+       inside Bash invocations).
+    2. ``uv tool install --force "$PLUGIN_ROOT/server"`` runs *before*
+       ``pace init``, in its own subprocess. This is what makes MCP
+       launches sub-100ms; running install from inside a pace init
+       process triggers Windows file-lock errors.
+    3. ``pace init --plugin-root "$PLUGIN_ROOT"`` produces a durable
+       project ``.mcp.json``.
+    """
+    text = _skill_text()
+    # Must NOT use the literal ${CLAUDE_PLUGIN_ROOT} in shell — bug-guard.
+    assert "${CLAUDE_PLUGIN_ROOT}/server" not in text
+    # Must show the model how to discover the plugin path.
+    assert "ls -d ~/.claude/plugins/marketplaces/*/pace-memory" in text
+    # Persistent install step must appear BEFORE pace init in the body.
+    install_idx = text.find('uv tool install --force "$PLUGIN_ROOT/server"')
+    init_idx = text.find('pace init --plugin-root "$PLUGIN_ROOT"')
+    assert install_idx > 0, "must include `uv tool install` step"
+    assert init_idx > 0, "must include `pace init --plugin-root` step"
+    assert install_idx < init_idx, "install must appear before pace init"
+    # Captures use the same uvx pattern.
+    assert 'uvx --from "$PLUGIN_ROOT/server" pace capture' in text
+    # Must collect identity (3 questions) and tell the user to restart.
+    assert "What should I call you?" in text
+    assert "restart" in text.lower()
 
 
 def test_onboarding_reference_asks_for_emoji_and_pins_identity() -> None:
@@ -190,18 +251,41 @@ def test_pace_setup_command_present() -> None:
 
 
 def test_pace_setup_command_has_frontmatter_and_uses_bundled_cli() -> None:
-    """The command must (a) declare a description so it shows up in `/`
-    autocomplete, (b) restrict tools to Bash so the model can't drift
-    into MCP-tool territory before the restart, and (c) actually invoke
-    the bundled CLI via uvx — that's the whole reason this slash
-    command exists (sidestepping the MCP-not-loaded issue)."""
+    """The command must (a) declare a description so it shows up in the
+    plugin slash-command picker, (b) authorize Bash so the model can
+    actually run the bootstrap (omitting allowed-tools defaults to
+    nothing-authorized → silent freeze), and (c) actually invoke the
+    bundled CLI via uvx with --plugin-root so the project .mcp.json
+    gets a durable uvx-based command (the whole reason this slash
+    command exists).
+
+    The shell variable ``$PLUGIN_ROOT`` is set by the command body via
+    a glob over ``~/.claude/plugins/marketplaces/*/pace-memory`` —
+    that's what's actually portable across user-uploaded and future
+    marketplace installs. ``${CLAUDE_PLUGIN_ROOT}`` is NOT used here
+    because Claude Code does not expand it inside Bash invocations.
+    """
     text = (PLUGIN_ROOT / "commands" / "pace-setup.md").read_text(encoding="utf-8")
     assert text.startswith("---\n")
     assert "description:" in text
-    assert '"Bash"' in text or "'Bash'" in text
-    # The whole point: use uvx against the bundled server source.
-    assert 'uvx --from "${CLAUDE_PLUGIN_ROOT}/server" pace init' in text
-    assert 'uvx --from "${CLAUDE_PLUGIN_ROOT}/server" pace capture' in text
+    # Bash must be authorized; omitting the field silently disables tools.
+    assert "allowed-tools:" in text
+    assert '"Bash"' in text
+    # Must NOT use ${CLAUDE_PLUGIN_ROOT} literal in shell — that's the
+    # bug we're guarding against.
+    assert "${CLAUDE_PLUGIN_ROOT}/server" not in text
+    # Must run `uv tool install` BEFORE `pace init` (no in-flight
+    # pace process during install → no Windows file-lock errors).
+    install_idx = text.find('uv tool install --force "$PLUGIN_ROOT/server"')
+    init_idx = text.find(
+        'uvx --from "$PLUGIN_ROOT/server" pace init --plugin-root "$PLUGIN_ROOT"'
+    )
+    assert install_idx > 0, "command must include `uv tool install` step"
+    assert init_idx > 0, "command must include `pace init` step"
+    assert install_idx < init_idx, "install must come before pace init"
+    assert 'uvx --from "$PLUGIN_ROOT/server" pace capture' in text
+    # Must show the model how to discover the plugin path.
+    assert "ls -d ~/.claude/plugins/marketplaces/*/pace-memory" in text
 
 
 def test_pace_setup_command_tells_user_to_restart() -> None:

@@ -80,14 +80,177 @@ system/logs/
 """
 
 
-def _build_mcp_config(root: Path) -> dict:
+def _detect_plugin_root(start: Path | None = None) -> Path | None:
+    """Walk up from ``start`` looking for ``.claude-plugin/plugin.json``.
+
+    When ``pace init`` is invoked via ``uvx --from <plugin>/server pace``
+    (i.e. the bootstrap path that runs from a Claude Code plugin
+    install), ``pace.__file__`` lives inside the plugin directory tree
+    and walking up four levels finds the plugin root. When ``pace
+    init`` is run from a developer venv or a regular pip install,
+    nothing on the way up has ``.claude-plugin/plugin.json`` directly
+    under it, so this returns ``None`` and the caller falls back to
+    embedding ``sys.executable`` in the project ``.mcp.json``.
+
+    Note: the dev *source* repo has the manifest at
+    ``plugin/.claude-plugin/plugin.json`` (one extra level), so a dev
+    invocation does **not** false-positive — we only match when the
+    manifest sits *directly* under a candidate dir.
+    """
+    if start is None:
+        start = Path(__file__).resolve()
+    cur = start.parent if start.is_file() else start
+    for _ in range(10):
+        if (cur / ".claude-plugin" / "plugin.json").is_file():
+            return cur
+        if cur.parent == cur:
+            break
+        cur = cur.parent
+    return None
+
+
+def _discover_plugin_root(home: Path | None = None) -> Path | None:
+    """Best-effort search for the pace-memory plugin install directory.
+
+    Looks under ``~/.claude/plugins/marketplaces/*/pace-memory/`` for a
+    subdirectory containing both ``.claude-plugin/plugin.json`` and
+    ``server/``. Returns the first match. Used by ``pace bootstrap`` so
+    technical users don't have to type the full plugin path.
+
+    Pass ``home`` for testing; defaults to ``Path.home()``.
+    """
+    base = (home or Path.home()) / ".claude" / "plugins" / "marketplaces"
+    if not base.is_dir():
+        return None
+
+    for marketplace in sorted(base.iterdir()):
+        if not marketplace.is_dir():
+            continue
+        candidate = marketplace / "pace-memory"
+        if (
+            (candidate / ".claude-plugin" / "plugin.json").is_file()
+            and (candidate / "server").is_dir()
+        ):
+            return candidate.resolve()
+    return None
+
+
+def install_pace_persistently(plugin_root: Path) -> None:
+    """Run ``uv tool install --force <plugin>/server``.
+
+    Used by ``pace bootstrap`` (where pace itself isn't currently
+    running, so file-lock errors that bit v0.3.4 don't apply). Raises
+    a :class:`subprocess.CalledProcessError` on failure so the CLI
+    surfaces it cleanly.
+    """
+    server_dir = plugin_root / "server"
+    if not (server_dir / "pyproject.toml").is_file():
+        raise FileNotFoundError(
+            f"Plugin server source not found at {server_dir}; "
+            "verify --plugin-root or that the plugin install is intact."
+        )
+    subprocess.run(
+        ["uv", "tool", "install", "--force", str(server_dir)],
+        check=True,
+    )
+
+
+def _resolve_persistent_pace_mcp() -> str | None:
+    """Return the absolute path of a persistently-installed pace-mcp
+    binary, or None if no such install exists.
+
+    This **only looks up** an existing install — it never attempts
+    to install. Why: ``pace init`` runs *as* the bundled pace
+    package, frequently via ``uvx --from <plugin>/server`` which
+    will reuse an existing ``uv tool install`` if one is present.
+    Trying to ``uv tool install --force`` from inside that running
+    pace process triggers Windows file-lock errors as uv tries to
+    delete files the running interpreter has open. The bootstrap
+    flow puts the install step in a separate subprocess (see SKILL
+    Step "Install pace persistently") *before* invoking pace init,
+    so by the time we land here the install is already done.
+
+    Asks ``uv tool dir --bin`` for the install bin directory rather
+    than relying on PATH (which has the ephemeral uvx env in front
+    when pace init was launched via uvx).
+
+    Returns the path as a string for direct embedding in
+    ``.mcp.json``; returns None if uv isn't installed, isn't on
+    PATH, or there's no pace-mcp binary at the expected location.
+    Callers fall back to the uvx-based ``.mcp.json`` shape in that
+    case (slower first launch, but still functional once a manual
+    install completes later).
+    """
+    try:
+        result = subprocess.run(
+            ["uv", "tool", "dir", "--bin"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return None
+
+    bin_dir = Path(result.stdout.strip())
+    bin_name = "pace-mcp.exe" if sys.platform == "win32" else "pace-mcp"
+    bin_path = bin_dir / bin_name
+    return str(bin_path) if bin_path.is_file() else None
+
+
+def _build_mcp_config(
+    root: Path,
+    *,
+    plugin_root: Path | None = None,
+    pace_mcp_bin: str | None = None,
+) -> dict:
     """Construct the ``.mcp.json`` payload for this vault.
 
-    Uses the *current* Python interpreter so the registered server is
-    guaranteed to have ``pace`` importable. Sets ``PACE_ROOT`` so the
-    server resolves the right vault even when Cowork launches it from
-    a different cwd.
+    Three shapes, in priority order:
+
+    1. **Persistent install** (``pace_mcp_bin`` provided). Best path:
+       absolute path to ``pace-mcp.exe`` from ``uv tool install``.
+       Sub-100ms launches, durable across restarts and ``uv cache
+       clean``.
+    2. **uvx fallback** (``plugin_root`` provided, install failed).
+       Spawns ``uvx --from <plugin>/server pace-mcp`` on every
+       session start. Works but slow on cold cache; can trip Claude
+       Code's MCP startup timeout.
+    3. **Dev/CLI invocation** (neither provided). Embeds
+       ``sys.executable`` directly — correct only when ``pace init``
+       was run from a stable venv or pip install.
+
+    ``PACE_ROOT`` is set in every shape so the server resolves the
+    right vault even when launched from a different cwd.
     """
+    if plugin_root is None:
+        plugin_root = _detect_plugin_root()
+
+    if pace_mcp_bin is not None:
+        return {
+            "mcpServers": {
+                "pace": {
+                    "command": pace_mcp_bin,
+                    "args": [],
+                    "env": {"PACE_ROOT": str(root)},
+                }
+            }
+        }
+
+    if plugin_root is not None:
+        return {
+            "mcpServers": {
+                "pace": {
+                    "command": "uvx",
+                    "args": [
+                        "--from",
+                        str(plugin_root / "server"),
+                        "pace-mcp",
+                    ],
+                    "env": {"PACE_ROOT": str(root)},
+                }
+            }
+        }
+
     return {
         "mcpServers": {
             "pace": {
@@ -120,8 +283,22 @@ class ReindexResult:
     skipped: int
 
 
-def init(root: Path) -> InitResult:
-    """Scaffold ``root`` as a PACE vault. Idempotent."""
+def init(root: Path, *, plugin_root: Path | None = None) -> InitResult:
+    """Scaffold ``root`` as a PACE vault. Idempotent.
+
+    Args:
+        root: vault directory.
+        plugin_root: when set, ``.mcp.json`` is written with a
+            ``uvx --from <plugin_root>/server pace-mcp`` command. This
+            is what the SKILL/slash-command bootstrap passes when
+            invoking ``pace init`` via uvx from a plugin install — the
+            ``sys.executable`` form would otherwise embed an ephemeral
+            uvx-cache path. When ``None``, the function still tries
+            :func:`_detect_plugin_root` as a heuristic fallback (works
+            only for unusual layouts; the uvx-cache case can't be
+            detected from ``pace.__file__`` alone), and falls through
+            to ``sys.executable`` if even that fails.
+    """
     root = root.resolve()
     already = is_initialized(root)
 
@@ -167,9 +344,43 @@ def init(root: Path) -> InitResult:
         created_files.append(".gitignore")
 
     # .mcp.json ---------------------------------------------------------
+    # When invoked from a plugin context, look up the persistently-
+    # installed pace-mcp binary so MCP launches don't trip Claude Code's
+    # startup timeout. Caller (the SKILL bootstrap, or a power user)
+    # is responsible for having run `uv tool install <plugin>/server`
+    # *before* calling pace init — we deliberately don't attempt the
+    # install ourselves because pace init may be running *as* the very
+    # tool install we'd be updating (Windows file-lock territory).
+    # If no persistent install exists yet, fall back to the slower
+    # `uvx --from` shape; that still works (just rebuilds on every
+    # session) and the user can promote to a fast install later by
+    # running `uv tool install` and re-running pace init.
+    pace_mcp_bin: str | None = None
+    if plugin_root is not None:
+        pace_mcp_bin = _resolve_persistent_pace_mcp()
+        if pace_mcp_bin is None:
+            print(
+                "warning: no persistent pace-mcp install found; "
+                ".mcp.json will use `uvx --from` (slow first launch).",
+                file=sys.stderr,
+            )
+            print(
+                "         to upgrade, run "
+                "`uv tool install --force <plugin>/server` then "
+                "re-run pace init.",
+                file=sys.stderr,
+            )
+
     mcp_config_path = root / ".mcp.json"
     if not mcp_config_path.exists():
-        payload = json.dumps(_build_mcp_config(root), indent=2) + "\n"
+        payload = json.dumps(
+            _build_mcp_config(
+                root,
+                plugin_root=plugin_root,
+                pace_mcp_bin=pace_mcp_bin,
+            ),
+            indent=2,
+        ) + "\n"
         atomic_write_text(mcp_config_path, payload)
         created_files.append(".mcp.json")
 

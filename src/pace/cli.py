@@ -69,11 +69,28 @@ def main() -> None:
     default=None,
     help="Vault root to initialize. Defaults to the current directory.",
 )
-def init(root: Path | None) -> None:
+@click.option(
+    "--plugin-root",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+    help=(
+        "Absolute path to the Claude Code plugin install (the folder "
+        "containing .claude-plugin/plugin.json). When set, the project "
+        "`.mcp.json` is written with `uvx --from <plugin-root>/server "
+        "pace-mcp` so the MCP server re-resolves a fresh interpreter on "
+        "every session — the only durable shape when `pace init` is "
+        "invoked via uvx from a plugin install. The SKILL bootstrap "
+        "passes this; you generally won't pass it by hand."
+    ),
+)
+def init(root: Path | None, plugin_root: Path | None) -> None:
     """Scaffold an empty PACE vault. Idempotent — safe to re-run."""
     target = (root or Path.cwd()).resolve()
     target.mkdir(parents=True, exist_ok=True)
-    result = vault_ops.init(target)
+    result = vault_ops.init(
+        target,
+        plugin_root=plugin_root.resolve() if plugin_root is not None else None,
+    )
 
     if result.already_initialized and not result.created_dirs and not result.created_files:
         click.echo(f"Vault already initialized at {result.root}.")
@@ -90,6 +107,105 @@ def init(root: Path | None) -> None:
             click.echo(f"    + {f}")
     if result.git_initialized:
         click.echo("  Initialized git repository (branch: main).")
+
+
+# ---- bootstrap ---------------------------------------------------------
+
+
+@main.command()
+@click.argument("vault_path", type=click.Path(path_type=Path))
+@click.option(
+    "--plugin-root",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+    help=(
+        "Plugin install directory. Defaults to auto-discovery under "
+        "~/.claude/plugins/marketplaces/*/pace-memory/."
+    ),
+)
+def bootstrap(vault_path: Path, plugin_root: Path | None) -> None:
+    """Stand up a brand-new PACE vault end-to-end.
+
+    Single-command setup for technical users. Does the same work
+    end-users could otherwise get only via the conversational
+    "Onboard me to PACE" flow, but deterministically:
+
+    \b
+    1. Auto-discovers the pace-memory plugin install (or accepts
+       --plugin-root).
+    2. Runs `uv tool install --force <plugin>/server` so pace-mcp.exe
+       lands in ~/.local/bin/ and Claude Code's MCP launcher can
+       spawn it without rebuilding from a uvx cache.
+    3. Creates the vault directory and runs `pace init --plugin-root
+       <plugin>` against it. Writes a project-level .mcp.json
+       pointing at the persistent pace-mcp.exe.
+
+    After this completes, open VAULT_PATH in Claude Code (with
+    'Use a worktree' OFF). The PACE MCP tools will be loaded
+    immediately. Greet Claude normally and the SKILL will run a
+    short identity onboarding (your name, an optional nickname/emoji
+    for the assistant) the first time. From then on, just talk.
+
+    Example:
+
+    \b
+        pace bootstrap ~/agents/Bob
+        pace bootstrap C:\\Users\\me\\Desktop\\Carla
+    """
+    target = vault_path.expanduser().resolve()
+
+    # 1. Resolve plugin root.
+    if plugin_root is None:
+        discovered = vault_ops._discover_plugin_root()
+        if discovered is None:
+            raise click.ClickException(
+                "Could not auto-discover the pace-memory plugin install. "
+                "Pass --plugin-root <path> explicitly. Plugins typically "
+                "live under ~/.claude/plugins/marketplaces/<source>/pace-memory/."
+            )
+        plugin_root = discovered
+    else:
+        plugin_root = plugin_root.expanduser().resolve()
+        if not (plugin_root / ".claude-plugin" / "plugin.json").is_file():
+            raise click.ClickException(
+                f"--plugin-root {plugin_root} does not look like a plugin "
+                "install (no .claude-plugin/plugin.json). Pass the directory "
+                "containing both .claude-plugin/ and server/."
+            )
+
+    click.echo(f"Plugin install: {plugin_root}")
+
+    # 2. Persistent pace install (idempotent; --force handles upgrades).
+    click.echo("Installing pace-mcp persistently via `uv tool install`...")
+    try:
+        vault_ops.install_pace_persistently(plugin_root)
+    except FileNotFoundError as exc:
+        raise click.ClickException(str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 - surface any uv failure
+        raise click.ClickException(
+            f"`uv tool install` failed: {exc}. If the error is "
+            f"'Access is denied', run `uv tool uninstall pace-memory` "
+            f"and retry."
+        ) from exc
+
+    # 3. Scaffold the vault.
+    target.mkdir(parents=True, exist_ok=True)
+    click.echo(f"Initializing vault at {target}...")
+    result = vault_ops.init(target, plugin_root=plugin_root)
+
+    if result.created_files:
+        for f in result.created_files:
+            click.echo(f"  + {f}")
+    if result.git_initialized:
+        click.echo("  + git repository initialized")
+
+    click.echo("")
+    click.echo(f"Vault ready: {target}")
+    click.echo(
+        "Open it in Claude Code (with 'Use a worktree' UNCHECKED). "
+        "The pace_* MCP tools will load on session start; greet Claude "
+        "and a brief identity onboarding will run the first time."
+    )
 
 
 # ---- status ------------------------------------------------------------

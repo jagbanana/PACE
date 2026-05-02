@@ -21,7 +21,7 @@ PACE solves that.
 It lets you stand up **individual, named coworkers**, each with its own personality and its own persistent memory. PACE agents mature from intern, to junior, to senior over the course of weeks of real work.
 
 - Installs as a single Claude Desktop App plugin — upload one file and you're done
-- **Run multiple PACE agents on the same machine** — one folder per agent, each with its own name, personality, and persistent memory
+- Run multiple PACE agents on the same machine — one folder per agent, each with its own name, personality, and persistent memory
 - Each PACE agent can handle multiple projects, just like real humans
 - Natural language onboarding, no technical configuration
 - Learns your work style, preferences, and project details, evolving to you and the job
@@ -30,6 +30,8 @@ It lets you stand up **individual, named coworkers**, each with its own personal
 - Maintains long-term memory without bloating context
 - Performs its own maintenance, staying performant via indexing and linking
 - Everything is human-readable via Obsidian
+
+PACE agents act like experts! They don't just respond. They proactively setup systems and structures to deliver effectively on your goals.
 
 The model behind it is the human one: each PACE coworker handles 3–4 projects for you, just like a real employee, and you bring them up the curve over time. Each has a name, an emoji, and a voice; each remembers the last conversation, the last decision, and why you made it. You can stand up several at once — one per folder, each with its own scope (e.g. `~/agents/Misa` for marketing work, `~/agents/Bob` for research) — and they stay completely separate.
 
@@ -65,7 +67,7 @@ Behind the scenes:
 
 ### Status
 
-v0.3.1 — beta. Targets **Claude Code** as the primary client. Multiple PACE agents per machine (one per folder) supported as of 0.3.0; first-vault setup via the `/pace-setup` slash command as of 0.3.1. Cowork support exists but has known technical challenges getting Cowork to recognize the MCP tools (see [Cowork status](#cowork-status) below).
+v0.3.6 — beta. Targets **Claude Code** as the primary client. Multiple PACE agents per machine (one per folder) supported as of 0.3.0; first-vault setup is a single CLI command (`pace bootstrap <path>`) as of 0.3.6 — the conversational "Onboard me to PACE" path is still wired up but recommended only as a fallback. Cowork support exists but has known technical challenges getting Cowork to recognize the MCP tools (see [Cowork status](#cowork-status) below).
 
 230+ tests cover capture, search, compaction, review, the proactive heartbeat, multi-vault resolution, and the MCP surface. Used daily by the maintainer. Mac dogfood pending; Windows + OneDrive is the primary target.
 
@@ -445,17 +447,39 @@ Three steps. Total time: under a minute, plus a Claude Desktop restart.
 
 After installing `uv`, fully quit and relaunch the Claude Desktop App so the new `PATH` propagates.
 
-### Stand up your first vault
+### Stand up your first vault — one CLI command
 
-1. In **Claude Code**, open the folder you want to use as your vault — typically somewhere in your Documents. **Uncheck "Use a worktree"** near the folder picker; PACE writes to the folder you opened, and a worktree detaches the session into a generated copy where the vault won't load.
-2. Type **`/pace-setup`** and press enter. Claude asks you a short onboarding (your name; an optional nickname/emoji for the assistant; what you'll use this folder for), scaffolds the vault on disk, captures your identity, and asks you to restart the session.
-3. **Restart the Claude Code session** in the same folder (worktree still off). On restart, the project-level `.mcp.json` written by `/pace-setup` is loaded by Claude Code, the PACE MCP tools come online, and from then on **just talk** — Claude handles remembering for you. No trigger phrase needed; the in-vault `CLAUDE.md` keeps PACE active automatically.
+The plugin install above gets `pace-memory.exe` and `uv` on your PATH but does **not** automatically prep a vault folder. Use `pace bootstrap` to do that in one shot:
 
-`/pace-setup` is the only non-natural-language step you'll ever type. It exists because the plugin's bundled MCP server doesn't always auto-load on the *first* session in a brand-new folder when the plugin was installed via "Upload Plugin"; `/pace-setup` sidesteps that by invoking the bundled CLI directly. After the restart, everything is conversational.
+```powershell
+# Windows PowerShell
+pace bootstrap "C:\Users\you\Desktop\Bob"
+```
+
+```bash
+# macOS / Linux
+pace bootstrap ~/agents/Bob
+```
+
+That command:
+
+1. Auto-discovers the pace-memory plugin install under `~/.claude/plugins/marketplaces/*/pace-memory/`.
+2. Runs `uv tool install --force <plugin>/server` so `pace-mcp.exe` lands persistently in `~/.local/bin/` (sub-100ms MCP launches; survives `uv cache clean`).
+3. Creates the vault directory and runs `pace init --plugin-root <plugin>` against it. Writes a project-level `.mcp.json` pointing at the persistent `pace-mcp.exe`.
+
+When it returns, **open the vault folder in Claude Code** with **"Use a worktree"** unchecked. The PACE MCP tools (`pace_status`, `pace_capture`, …) load on session start. Greet Claude normally — the SKILL runs a brief identity onboarding (your name; an optional nickname/emoji for the assistant; the work you'll do here) the first time, captures it via the now-loaded MCP, and then just talks.
+
+> **Cold-start quirk**: on the very first message in a brand-new vault, Claude Code may briefly report "no PACE tools available." This is a Claude Code MCP-launcher race that affects any project with a project-level `.mcp.json`. Just send a follow-up message — the tools will be connected by the time the second message lands, and every subsequent session loads them instantly. Harmless; nothing to fix on the PACE side.
+
+If `pace bootstrap` can't find the plugin install (e.g. you installed it from a custom marketplace), pass `--plugin-root` explicitly:
+
+```powershell
+pace bootstrap "C:\Users\you\Desktop\Bob" --plugin-root "$env:USERPROFILE\.claude\plugins\marketplaces\my-marketplace\pace-memory"
+```
 
 ### Multiple PACE agents
 
-Repeat the steps above in a different folder to stand up another agent (open the new folder, `/pace-setup`, restart). Each lives in its own folder with its own name, personality, and memory; they don't share context. A common layout:
+Run `pace bootstrap` in a different folder to stand up another agent. Each lives in its own folder with its own name, personality, and memory; they don't share context. A common layout:
 
 ```
 ~/Documents/agents/
@@ -465,6 +489,10 @@ Repeat the steps above in a different folder to stand up another agent (open the
 ```
 
 Open whichever folder matches the work you're doing today; that agent's memory loads automatically.
+
+#### About the conversational "Onboard me to PACE" path
+
+A skill in the plugin recognizes phrases like *"Set up PACE"* / *"Onboard me to PACE"* / *"Make this a PACE vault"* and tries to walk a fresh folder through the same bootstrap as `pace bootstrap`. It works some of the time, but Claude Code's skill activation for user-uploaded plugins is currently inconsistent — that's why the CLI command above is the recommended path. If you're already deep in a chat session and want to try it conversationally, `/pace-memory:pace-setup` and the natural-language phrases above are still wired up.
 
 ### Cowork status
 
@@ -493,7 +521,8 @@ The model uses MCP tools; humans use the CLI. They share the same underlying fun
 
 | Command | Purpose |
 |---|---|
-| `pace init [<path>]` | Scaffold an empty vault. Idempotent. Records the path in the per-user config. |
+| `pace bootstrap <path>` | One-shot first-vault setup: auto-discovers the plugin install, runs `uv tool install`, scaffolds the vault, writes a durable `.mcp.json`. The recommended install path. |
+| `pace init [--root <path>] [--plugin-root <path>]` | Scaffold an empty vault (lower-level than `bootstrap` — does not run `uv tool install`). Idempotent. |
 | `pace status` | File counts, last-task timestamps, health summary. |
 | `pace capture --kind <k> [--topic <t>] [--project <p>] [--note <n>] [--tag ...] "<text>"` | Persist content. Kinds: `working`, `long_term`, `project_summary`, `project_note`. |
 | `pace search "<query>" [--scope memory\|projects\|all] [--project <p>]` | FTS5 search; ranked snippets. |

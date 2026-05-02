@@ -4,18 +4,190 @@ All notable changes to PACE are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.6] — 2026-05-01
+
+### Added
+- **`pace bootstrap <path>` CLI command.** Single-command first-vault
+  setup for technical users — bypasses the conversational
+  "Onboard me to PACE" path entirely. Auto-discovers the pace-memory
+  plugin install under `~/.claude/plugins/marketplaces/*/pace-memory/`,
+  runs `uv tool install --force <plugin>/server` so `pace-mcp.exe`
+  lands persistently in `~/.local/bin/`, then scaffolds the vault and
+  writes a project-level `.mcp.json` pointing at the persistent
+  binary. Open the resulting folder in Claude Code and the PACE MCP
+  tools load on session start; the SKILL handles the brief identity
+  onboarding conversationally on first chat. `--plugin-root` lets
+  users with custom marketplaces or non-default install paths
+  override the auto-discovery.
+- **`vault._discover_plugin_root` and `vault.install_pace_persistently`
+  helpers** factored out of the bootstrap command so they're
+  reusable and testable.
+
+### Changed
+- **README install path rewritten.** The "Stand up your first vault"
+  section now leads with `pace bootstrap`. The conversational
+  "Onboard me to PACE" path is documented as a fallback, with an
+  explicit note that Claude Code's skill activation for user-uploaded
+  plugins is currently inconsistent — that's why the CLI is the
+  recommended entry point.
+- **SKILL.md description trimmed from 1215 to ~1000 chars** to fit
+  Anthropic's marketplace-validator 1024-char limit on `description`
+  fields. Same trigger-phrase coverage. New
+  `test_skill_description_under_marketplace_char_limit` guards
+  against regressions.
+
+## [0.3.5] — 2026-05-01
+
+### Fixed
+- **`pace init` no longer attempts `uv tool install` from inside its
+  own running process.** v0.3.4 invoked `uv tool install --force`
+  during init, but when `pace init` is launched via `uvx --from
+  <plugin>/server` and the plugin is already installed via
+  `uv tool install`, uvx reuses the persistent install — meaning
+  pace init was running *as* the very tool it was trying to
+  overwrite. On Windows this hit "Access is denied" file-lock
+  errors, sometimes leaving the persistent install half-deleted
+  (missing modules like `colorama`). The bootstrap stuttered and
+  produced broken vaults.
+
+  v0.3.5 separates concerns:
+  - `pace init` now only **looks up** the persistent install (via
+    `uv tool dir --bin`); it never installs.
+  - The SKILL/`/pace-setup` bootstrap recipe now runs `uv tool
+    install --force "$PLUGIN_ROOT/server"` as its own explicit step,
+    in its own subprocess, *before* invoking `pace init`. By the
+    time pace init runs, the install is complete and not in flight.
+
+  When pace init runs without a prior persistent install, it
+  gracefully falls back to the `uvx --from` shape in `.mcp.json`
+  (slow first launch, but functional). The user can promote to a
+  fast install later by running `uv tool install` and re-running
+  pace init.
+
+### Changed
+- **`PersistentInstallError` removed**, `_install_pace_persistently`
+  renamed to `_resolve_persistent_pace_mcp` to reflect the
+  lookup-only contract.
+- **SKILL.md and `/pace-setup`** now have an explicit "Install pace
+  persistently" step before "Scaffold the vault." Documentation
+  shows the two-step pattern and explains when "Access is denied"
+  during install means the user should run `uv tool uninstall
+  pace-memory` and retry.
+
+## [0.3.4] — 2026-05-01
+
+### Fixed
+- **MCP launch cold-start no longer trips Claude Code's startup
+  timeout.** v0.3.3's project `.mcp.json` invoked `uvx --from
+  <plugin>/server pace-mcp` on every session, which rebuilds the
+  package in an ephemeral env (5+ seconds with warm wheels, 30s+ on
+  cold cache). Claude Code's MCP launcher times out well before that
+  finishes, so newly-bootstrapped vaults intermittently failed to
+  connect.
+
+  v0.3.4: at `pace init --plugin-root <path>` time, run
+  `uv tool install --force <plugin>/server`. That drops a
+  persistent `pace-mcp.exe` into `~/.local/bin/` (same directory
+  Claude Code already knows about for `uvx`). The project
+  `.mcp.json` then embeds the absolute path to that binary directly:
+
+  ```json
+  {
+    "mcpServers": {
+      "pace": {
+        "command": "C:\\Users\\…\\.local\\bin\\pace-mcp.exe",
+        "args": [],
+        "env": { "PACE_ROOT": "…" }
+      }
+    }
+  }
+  ```
+
+  Sub-100ms launches; survives `uv cache clean`; survives reboots.
+
+### Added
+- **`PersistentInstallError` exception** + graceful fallback. If
+  `uv tool install` fails (no `uv` on PATH, network outage, malformed
+  plugin source), `pace init` warns to stderr and falls back to the
+  v0.3.3 `uvx --from` shape rather than aborting. The vault is still
+  scaffolded and usable, just slow on first MCP launch until a manual
+  install succeeds.
+
+## [0.3.3] — 2026-05-01
+
+### Added
+- **`pace init --plugin-root <path>` CLI flag.** Lets the SKILL/slash-
+  command bootstrap pass the plugin install path explicitly. When set,
+  `pace init` writes a project `.mcp.json` with
+  `uvx --from <plugin-root>/server pace-mcp` — durable, identical to
+  the plugin's own root `.mcp.json`. Replaces v0.3.2's walk-up
+  heuristic, which couldn't work in the actual uvx invocation case
+  (uvx puts `pace.__file__` in its cache, which has no
+  `.claude-plugin/` ancestor).
+
+### Fixed
+- **Real fix for the ephemeral-uvx-cache bug.** v0.3.1 wrote a
+  `command` pointing at `%LOCALAPPDATA%\uv\cache\archive-v0\<hash>\
+  Scripts\python.exe`. v0.3.2 tried to detect plugin context but
+  detection couldn't fire from inside uvx's cache. v0.3.3 takes the
+  plugin path as an explicit CLI argument from the bootstrap caller,
+  closing the loop. New first-vault setups produce a project
+  `.mcp.json` Claude Code can spawn against on every restart, even
+  after `uv cache clean`.
+
+### Changed
+- **SKILL.md and `/pace-setup` bootstrap recipes rewritten.**
+  Both now (1) instruct the model to discover the plugin install
+  path via `ls -d ~/.claude/plugins/marketplaces/*/pace-memory`
+  rather than relying on `${CLAUDE_PLUGIN_ROOT}` (which Claude Code
+  doesn't expand inside Bash invocations); (2) pass `--plugin-root
+  "$PLUGIN_ROOT"` to `pace init` so the resulting `.mcp.json` is
+  durable; (3) use the same `$PLUGIN_ROOT` shell variable for all
+  subsequent `pace capture` calls.
+
+## [0.3.2] — 2026-05-01
+
+### Fixed
+- **Project-level `.mcp.json` now uses `uvx` when written from a
+  plugin-context invocation.** v0.3.1's first-vault bootstrap ran
+  `pace init` via `uvx --from <plugin>/server`, which made
+  `sys.executable` an ephemeral path under
+  `%LOCALAPPDATA%\uv\cache\archive-v0\<hash>\Scripts\python.exe`.
+  Embedding that path in the project `.mcp.json` produced a config
+  Claude Code couldn't re-spawn against on the next session, so
+  the `pace_*` MCP tools never loaded for newly-bootstrapped vaults.
+
+  `pace init` now detects when it's running inside a plugin install
+  (via walking up from `pace.__file__` looking for
+  `.claude-plugin/plugin.json`) and writes a `uvx --from <plugin>/server
+  pace-mcp` command — the same self-resurrecting pattern the plugin's
+  own root `.mcp.json` uses, just with the literal plugin path baked
+  in (project-level `.mcp.json` doesn't get `${CLAUDE_PLUGIN_ROOT}`
+  substitution). Dev/CLI invocations from a stable venv keep the old
+  `sys.executable` form, since that's correct for them.
+
+  This was the actual blocker that kept new vaults from coming online
+  after restart in v0.3.1 — symptom was "vault scaffolds fine, identity
+  saves fine, but `pace_status` and friends are missing in the next
+  session."
+
 ## [0.3.1] — 2026-05-01
 
 ### Added
-- **`/pace-setup` slash command** for first-vault bootstrap. Real-world
-  install path: open a folder in Claude Code → type `/pace-setup` →
-  answer two onboarding questions → restart the session → done. The
-  command runs the plugin's bundled CLI through Bash + uvx, which
-  works even when Claude Code's plugin runtime hasn't auto-loaded the
-  plugin's MCP server (a known lifecycle quirk for plugins installed
-  via "Upload Plugin"). After the restart, the project-level
-  `.mcp.json` written by `pace init` loads PACE normally and from
-  then on the user just talks.
+- **First-vault bootstrap recipe baked into SKILL.md.** When the user
+  says "set up PACE" / "onboard me to PACE" / similar in a brand-new
+  folder, the skill walks the model through a 4-step Bash-driven
+  bootstrap (greet, run `pace init` via uvx, capture identity via
+  `pace capture` invocations, ask the user to restart). After the
+  restart, the project-level `.mcp.json` loads the PACE MCP server
+  the normal way. End-user experience: open folder → "Set up PACE"
+  → answer onboarding questions → restart → just talk.
+- **`/pace-memory:pace-setup` slash command** as a redundant
+  convenience that wraps the same recipe — useful if the user
+  prefers typing slash commands. The skill is the primary path
+  because slash commands from user-uploaded plugins have proven
+  fragile in current Claude Code; the skill route works reliably
+  through Bash + uvx regardless.
 
 ### Changed
 - **SKILL.md description broadened.** First-vault setup phrases like
@@ -25,6 +197,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   The skill now routes those requests at `/pace-setup` instead of
   trying to call `pace_init` (which fails when the MCP server isn't
   loaded).
+- **"How to operate" section** added to both `CLAUDE_MD_TEMPLATE`
+  and `SKILL.md`. Three posture principles every PACE agent now
+  carries into every reply: (1) be useful — don't become a
+  liability or seek unnecessary feedback; (2) act like a senior
+  resource — build structures and surface them in Obsidian (with
+  recommendations for Calendar, Dataview, Kanban, Tasks, Templater
+  community plugins), then execute within them rather than
+  continuously re-engineering; (3) recommend Connectors and MCP
+  servers that would make the agent more independent, even if the
+  user can't enable them.
 - **README onboarding** updated to lead with `/pace-setup` as the
   one non-natural-language step. Status bumped to v0.3.1.
 
@@ -199,6 +381,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - 160+ tests covering capture, search, compaction, review, doctor,
   MCP surface, plugin packaging, and onboarding artifacts.
 
+[0.3.6]: https://github.com/jagbanana/PACE/releases/tag/v0.3.6
+[0.3.5]: https://github.com/jagbanana/PACE/releases/tag/v0.3.5
+[0.3.4]: https://github.com/jagbanana/PACE/releases/tag/v0.3.4
+[0.3.3]: https://github.com/jagbanana/PACE/releases/tag/v0.3.3
+[0.3.2]: https://github.com/jagbanana/PACE/releases/tag/v0.3.2
 [0.3.1]: https://github.com/jagbanana/PACE/releases/tag/v0.3.1
 [0.3.0]: https://github.com/jagbanana/PACE/releases/tag/v0.3.0
 [0.2.2]: https://github.com/jagbanana/PACE/releases/tag/v0.2.2

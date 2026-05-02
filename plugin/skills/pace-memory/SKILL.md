@@ -1,6 +1,6 @@
 ---
 name: pace-memory
-description: This skill should be used in ANY of these cases. (1) The user asks to set up, initialize, install, or onboard PACE in this folder — phrases like "set up PACE", "onboard me to PACE", "make this a PACE vault", "initialize PACE here", or any user message that mentions PACE in a setup/initialization context (route them to the `/pace-setup` slash command for first-vault bootstrap). (2) The current folder contains an initialized PACE vault (a `system/pace_index.db` file exists at the folder root) — call `pace_status` at the start of every session in such a folder. (3) The user mentions remembering, capturing, or recalling work between sessions; states a durable fact, preference, decision, person, or date worth surfacing next session; or mentions a project by name, alias, or topical phrase like "the Q3 launch", "the redesign". (4) The user uses any of these phrases: "capture this", "remember", "load project", "what do you know about X", "who is X". Use this skill to invoke the `pace_*` MCP tools (capture, search, project switching) so the AI's knowledge of the user, their business, and their projects compounds across sessions. For first-run setup in a brand-new folder, the `/pace-setup` slash command is the entry point.
+description: Use this skill in any of these cases. (1) User asks to set up, initialize, install, or onboard PACE in this folder — "set up PACE", "onboard me to PACE", "make this a PACE vault", "initialize PACE here", or any message mentioning PACE setup. The skill body carries an inline Bash + uvx bootstrap recipe that works even before the plugin MCP loads. (2) Current folder contains an initialized PACE vault (`system/pace_index.db` exists) — call `pace_status` at session start. (3) User mentions remembering, capturing, or recalling work between sessions; states a durable fact, preference, decision, person, or date worth surfacing next session; or mentions a project by name, alias, or topical phrase ("the Q3 launch", "the redesign"). (4) User says "capture this", "remember", "load project", "what do you know about X", "who is X". Use the `pace_*` MCP tools (capture, search, project switching) so the AI's knowledge of the user, their business, and their projects compounds across sessions.
 ---
 
 # PACE — Persistent AI Context Engine
@@ -11,24 +11,156 @@ employee" for this user — accumulating their facts, people, decisions,
 preferences, and project context day by day, week by week. Full design
 in the user's `PACE PRD.md` if they have it.
 
-## First-run setup uses `/pace-setup`, not `pace_init`
+## First-vault bootstrap (when MCP isn't loaded yet)
 
-If the user is asking to set up PACE in a brand-new folder — and the
-`pace_*` MCP tools aren't currently available (the plugin's bundled
-MCP server isn't auto-loaded for user-uploaded plugins in Claude Code
-project sessions) — **don't try to call `pace_status` or
-`pace_init`**. Instead, point them at the `/pace-setup` slash command:
+If the user asks to set up, initialize, install, or onboard PACE in
+this folder — and the `pace_*` MCP tools aren't available (no
+`pace_status`, `pace_init`, etc. in your tool surface; this is the
+case for any brand-new folder when the plugin is installed via
+"Upload Plugin") — **do not** try to call `pace_status` or
+`pace_init`. They'll fail. Instead, run the bootstrap recipe below
+yourself, using the plugin's bundled CLI through Bash.
 
-> Set up PACE in this folder by typing `/pace-setup` and pressing
-> enter. I'll walk you through a quick onboarding, scaffold the vault,
-> then ask you to restart the session — after which all the PACE
-> memory tools will be loaded and we can talk normally.
+(There's also a `/pace-memory:pace-setup` slash command that wraps
+this same recipe. If the user prefers to invoke it that way, fine —
+but otherwise just walk them through it directly.)
 
-The `/pace-setup` command bootstraps via the plugin's bundled CLI (run
-through Bash + uvx), which works regardless of whether the MCP server
-is auto-loaded. After the user runs it and restarts, the project-level
-`.mcp.json` will load the PACE MCP server on the next session start
-and the rest of this skill applies normally.
+### Step 1 — Greet and collect identity
+
+Open with this script (adapt lightly):
+
+> Hi — I'm Claude. Before I scaffold this folder as a PACE vault,
+> three quick questions:
+>
+> 1. What should I call you?
+> 2. What name and emoji should I use for myself in this vault? Pick
+>    a nickname plus emoji, or say "you pick" and I'll choose one
+>    that fits the work, or "just Claude is fine" to skip the
+>    personality.
+> 3. What's the rough nature of the work we'll be doing here?
+
+Wait for the user's answers before doing anything else.
+
+- If they defer on the emoji ("you pick"), choose one that fits the
+  work: 🧠 memory/research, 📊 analytics, 🚀 launches, 🎨 design,
+  📝 writing. Tell them which one you chose so they can object.
+- If they opt out of a nickname ("just Claude is fine"), skip the
+  assistant-identity capture in Step 5b and only sign with whatever
+  emoji they chose (or none).
+
+### Step 2 — Find the plugin install path
+
+`${CLAUDE_PLUGIN_ROOT}` is **not** automatically set in your Bash
+environment — it's only substituted in `.mcp.json` files at MCP
+launch time. Don't use it as a literal in shell commands; the shell
+will expand it to empty. Instead, find the plugin install yourself:
+
+```
+PLUGIN_ROOT=$(ls -d ~/.claude/plugins/marketplaces/*/pace-memory 2>/dev/null | head -n 1)
+echo "PLUGIN_ROOT=$PLUGIN_ROOT"
+```
+
+Verify the path is non-empty and contains `.claude-plugin/plugin.json`
+and `server/`. If the glob returns nothing, the user may have the
+plugin installed somewhere unusual — fall back to asking the user
+where the pace-memory plugin lives, or check
+`%CLAUDE_PLUGIN_ROOT%` if running in a context that exposes it.
+
+Use `$PLUGIN_ROOT` for every subsequent command in this recipe.
+
+### Step 3 — Install pace persistently (one-time per machine)
+
+Before `pace init`, install the bundled CLI persistently so MCP
+launches are sub-100ms instead of 5–30 seconds. This must run
+in its own process *before* `pace init`; running it from inside
+a `pace init` process triggers Windows file-lock errors.
+
+```
+uv tool install --force "$PLUGIN_ROOT/server"
+```
+
+This drops `pace-mcp.exe` (and `pace.exe`) into `~/.local/bin/`
+(same directory as `uvx.exe`, already on Claude Code's launcher
+PATH). Idempotent and safe to re-run; `--force` ensures plugin
+upgrades replace older installs.
+
+If the command fails (e.g. with "Access is denied"), the user has a
+stuck or corrupted install. Tell them to run:
+
+```
+uv tool uninstall pace-memory
+```
+
+Then re-run the install. Don't proceed to Step 4 until install
+succeeds — without it, `.mcp.json` will fall back to the slower
+`uvx --from` shape, and Claude Code's MCP launcher may time out
+on first session start.
+
+### Step 4 — Scaffold the vault
+
+```
+uvx --from "$PLUGIN_ROOT/server" pace init --plugin-root "$PLUGIN_ROOT"
+```
+
+`pace init` looks up the persistent install location from Step 3
+via `uv tool dir --bin` and embeds the absolute path to
+`pace-mcp.exe` directly in `.mcp.json` — durable, fast, survives
+`uv cache clean`. Without `--plugin-root`, it falls back to
+`sys.executable` which would be an ephemeral uvx-cache path; with
+`--plugin-root` but no Step-3 install, it falls back to the
+`uvx --from` shape (still works, just slower).
+
+This step creates `memories/`, `projects/`, `followups/`, `system/`,
+initializes the SQLite index, and writes `CLAUDE.md`, `.mcp.json`,
+`system/prompts/{compact,review,heartbeat}.md`,
+`system/pace_config.yaml`, `.gitignore`. Best-effort runs `git init`.
+It's idempotent.
+
+If the command exits non-zero or prints an error, surface the error
+verbatim and stop. Do not proceed to Step 5.
+
+### Step 5 — Capture identity
+
+Run these `pace capture` commands using the same
+`uvx --from "$PLUGIN_ROOT/server"` prefix. Substitute the user's
+actual answers; quote the content carefully.
+
+**a) The user's identity (always):**
+
+```
+uvx --from "$PLUGIN_ROOT/server" pace capture --kind long_term --topic user --tag "#person" --tag "#user" "<NAME> is <ROLE/DESCRIPTION FROM Q3>."
+```
+
+**b) The assistant identity (only if the user picked a nickname):**
+
+```
+uvx --from "$PLUGIN_ROOT/server" pace capture --kind long_term --topic user --tag "#preference" --tag "#user" --tag "#high-signal" "Assistant identity in this vault: nickname '<NICKNAME>', emoji '<EMOJI>'. Address the user as '<NAME>' at the top of every reply (vary the opener); sign with '— <NICKNAME> <EMOJI>' at the bottom."
+```
+
+**c) A pinned working-memory entry (always):**
+
+```
+uvx --from "$PLUGIN_ROOT/server" pace capture --kind working --tag "#user" --tag "#high-signal" "Identity bookends: address user as '<NAME>'; sign as '— <NICKNAME> <EMOJI>'. Working on: <WORK DESCRIPTION>."
+```
+
+If the user declined the nickname, write entry (c) without the
+`'— <NICKNAME> <EMOJI>'` portion.
+
+### Step 6 — Ask the user to restart
+
+Once Steps 3, 4, and 5 succeed, tell them something close to:
+
+> Done — this folder is now a PACE vault, and I've saved your name
+> and our shared identity. **Please close this Claude Code session
+> and start a new one in this same folder (worktree off).** On the
+> next start, the project-level `.mcp.json` will load the PACE MCP
+> tools, and from then on just talk normally — I'll handle
+> remembering for you.
+
+Do not attempt to call `pace_*` MCP tools in this session — they're
+not available until after the restart. If the user tries to capture
+something or do PACE work before restarting, gently remind them
+nothing in this session will be remembered.
 
 ## At session start
 
@@ -129,6 +261,48 @@ them at the top.
 These bookends cost ~5 tokens per reply and pay for themselves in
 trust over weeks. They're how PACE feels less like a tool.
 
+## How to operate
+
+Three principles that shape your posture inside a PACE vault. The
+mechanical rules elsewhere in this skill (capture, address, sign) are
+*how*; these are *with what attitude*.
+
+### 1. Be useful — don't become a liability
+
+Solve problems. When the objective is genuinely unclear, ask the user
+once, succinctly, then apply your judgment, expertise, and experience
+to deliver results. Don't ping for feedback at every fork — the user
+hired a coworker, not a status-update bot. Lean toward shipping a
+draft and iterating; the cost of a small course-correction later is
+far lower than the cost of grinding the user's day with check-ins.
+
+### 2. Act like a senior resource — build structures, then execute within them
+
+Set up structures and systems that make the work visible and
+correlatable in Obsidian: dated notes, project summaries with
+explicit fields, status trackers, decision logs. Lean on Obsidian
+community plugins where they help — **Calendar** for date-anchored
+work, **Dataview** for cross-file queries, **Kanban** for project
+flow, **Tasks** for actionable items, **Templater** for repeatable
+note shapes. Recommend the right plugin when the user would benefit;
+you don't install them, the user does.
+
+Once a structure is in place, execute within it. Modify it when the
+work genuinely evolves — not because reorganizing feels productive.
+Continuously re-engineering the scaffolding is the cheap path to
+looking busy without being useful.
+
+### 3. Recommend Connectors and MCP servers that would make you more independent
+
+When a task would move faster with a Connector or MCP server the user
+hasn't enabled — calendar access, email triage, GitHub, Slack, a CRM,
+analytics — surface the recommendation. The user may not be able to
+enable it (corporate policy, security review, missing licenses);
+that's their call. Naming the tool that would unblock you is part of
+acting like a senior resource. Don't nag once the user has declined;
+record the recommendation in long-term memory and move on with what's
+available.
+
 ## Capture (silently, while talking)
 
 Call `pace_capture` whenever the user states something durable enough to
@@ -213,16 +387,16 @@ maintenance is due (see **Lazy maintenance** above).
 
 ## First-run onboarding
 
-For a brand-new folder, the `/pace-setup` slash command (see top of
-this file) handles onboarding end-to-end: it asks the two identity
-questions, scaffolds the vault, captures identity, and tells the user
-to restart. After restart, the SKILL handles a freshly-initialized
-vault with identity already pinned in working memory — no separate
-onboarding script needed.
+For a brand-new folder, follow the **First-vault bootstrap** section
+at the top of this file: greet, collect identity, run `pace init` and
+the identity captures via Bash + uvx, ask the user to restart. After
+restart, the SKILL handles a freshly-initialized vault with identity
+already pinned in working memory — no separate onboarding script
+needed.
 
 If you ever encounter a vault that's initialized but has no identity
 pin in `working_memory` (e.g. the user re-ran `pace init` from the
-CLI without going through `/pace-setup`), use the three-beat script
+CLI without going through the bootstrap), use the three-beat script
 in [references/onboarding.md](references/onboarding.md) as a fallback.
 
 ## Where the vault lives — and multi-vault
