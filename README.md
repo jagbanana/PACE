@@ -31,6 +31,10 @@ It lets you stand up **individual, named coworkers**, each with its own personal
 - Performs its own maintenance, staying performant via indexing and linking
 - Everything is human-readable via Obsidian
 
+![A PACE agent's memory graph in Obsidian — working notes, long-term entries, weekly reviews, and projects all interlinked via wikilinks](screenshots/pace-auto-maintenance-memory-mapping.png)
+
+*A PACE agent's vault after a few weeks of use, viewed in Obsidian's graph mode. PACE maintains the wikilink network silently as you talk; the structure is there for you to browse, not something you have to curate.*
+
 PACE agents act like experts! They don't just respond. They proactively setup systems and structures to deliver effectively on your goals.
 
 The model behind it is the human one: each PACE coworker handles 3–4 projects for you, just like a real employee, and you bring them up the curve over time. Each has a name, an emoji, and a voice; each remembers the last conversation, the last decision, and why you made it. You can stand up several at once — one per folder, each with its own scope (e.g. `~/agents/Misa` for marketing work, `~/agents/Bob` for research) — and they stay completely separate.
@@ -46,6 +50,11 @@ Examples include:
 1. **Support and ticket resolution:** link your PACE agent to KB and system tools via MCP. It improve on its ability to resolve issues, learn how to escalate issues, and enhance your KB over time.
 2. **Marketing and research:** provide your PACE agent style guides, target audience information, and website & analytics access. It can build and execute on content plans, manage SEO, and more. Based on real-world feedback, it can learn, adjust, and apply continuous improvement.
 3. **Project management:** enable Obsidian plugins to visually manage workflows. Your PACE agent learns stakeholders, common dependencies, and structural risks. It can anticipate problems and proactively gather status from team members via connected channels.
+
+   ![A Kanban board built and maintained by a PACE agent in Obsidian](screenshots/pace-systems-structure.png)
+
+   *An Obsidian Kanban view of a project's status, scaffolded and kept current by the agent. PACE agents proactively build visible structures (Kanban, Calendar, Dataview tables, decision logs) so you can read the work at a glance.*
+
 4. **Ends with your imagination:** just like OpenClaw, PACE use cases are wide open and limited to your imagination. Not sure how to best use PACE? Setup a PACE agent specifically to brainstorm ideas. Discuss what you aren't good at, where you need help, and what you don't like doing. Let agents help you work more effectively and efficienctly!
 
 It is recommended to make one PACE agent per role (or per major use case), though each agent can handle multple projects.
@@ -56,6 +65,14 @@ Behind the scenes:
 - When you mention a project by name, alias, or even a topical phrase like *"the Q3 launch"*, the coworker pulls that project's summary into context before answering.
 - Compaction and weekly review run **silently at session start** when they're due: no scheduled tasks, no cron, no manual setup. Claude handles them in the background while you start your day.
 - An optional **proactive heartbeat** quietly checks during your work hours for things worth flagging, such as dated follow-ups coming due, stale commitments, repeated patterns. PACE agents then surface them at the top of your *next* session. Never interrupts; defaults to silence.
+
+![A polished portfolio-status response from a PACE agent](screenshots/pace-response-sample.png)
+
+*A real exec-sync briefing produced by a PACE agent. The agent already has the project context in long-term memory, knows your name, and produces something usable without making you re-explain the situation.*
+
+![A different PACE agent (Misa) helping with slide content](screenshots/pace-response-sample-agent2.png)
+
+*A separate PACE agent — Misa, ❤️ — running in a different folder, doing slide review. Each agent has its own name, emoji, voice, and persistent memory; they never share context.*
 
 **Note:** PACE is intended for Claude Cowork, but due to Cowork's flaky handling of plugins, I recommend using Claude Code in the Claude Desktop App as your interface. It'll give you the same basic experience and should just work.
 
@@ -290,6 +307,16 @@ Claude reads these at session start and runs whatever's flagged **silently in th
 
 Force-promotion has one exception: entries tagged `#user`, `#high-signal`, or `#decision` are **never** force-evicted. This is what lets PACE keep a pinned identity entry (your name, the assistant's nickname and emoji) at the top of working memory forever.
 
+**Optional: Routines for predictable schedules.** Lazy in-session maintenance is the default and needs no setup, but if you'd rather have maintenance fire on a clock — or if you want recurring user-facing briefings — PACE agents can register Claude Code Local Routines and ask before scheduling them.
+
+![A PACE agent designing a recurring Monday status routine](screenshots/pace-response-sample-2.png)
+
+*When asked for a recurring portfolio briefing, a PACE agent designs the schedule, picks a sensible cadence, asks where the output should land, and confirms before acting.*
+
+![Local Routines registered by a PACE agent](screenshots/pace-proactively-created-pace-routines.png)
+
+*The resulting Routines panel. PACE agents register their own daily compaction, weekly review, and heartbeat schedules so you don't have to think about maintenance.*
+
 ### Working-memory size budget
 
 Working memory is loaded in full on every `pace_status` call, so its size matters. PACE enforces a two-stage budget measured in characters (defaults in `system/pace_config.yaml`):
@@ -470,6 +497,10 @@ That command:
 When it returns, **open the vault folder in Claude Code** with **"Use a worktree"** unchecked. The PACE MCP tools (`pace_status`, `pace_capture`, …) load on session start. Greet Claude normally — the SKILL runs a brief identity onboarding (your name; an optional nickname/emoji for the assistant; the work you'll do here) the first time, captures it via the now-loaded MCP, and then just talks.
 
 > **Cold-start quirk**: on the very first message in a brand-new vault, Claude Code may briefly report "no PACE tools available." This is a Claude Code MCP-launcher race that affects any project with a project-level `.mcp.json`. Just send a follow-up message — the tools will be connected by the time the second message lands, and every subsequent session loads them instantly. Harmless; nothing to fix on the PACE side.
+
+![A PACE agent wrapping up identity onboarding in a fresh vault](screenshots/pace-onboarding.png)
+
+*Identity onboarding completing in a freshly-bootstrapped vault. The agent (Bob, ✌️) opts the user into the proactive heartbeat and is ready to start work.*
 
 If `pace bootstrap` can't find the plugin install (e.g. you installed it from a custom marketplace), pass `--plugin-root` explicitly:
 
