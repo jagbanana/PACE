@@ -33,7 +33,7 @@ It lets you stand up **individual, named coworkers**, each with its own personal
 
 ![A PACE agent's memory graph in Obsidian — working notes, long-term entries, weekly reviews, and projects all interlinked via wikilinks](screenshots/pace-auto-maintenance-memory-mapping.png)
 
-*A PACE agent's vault after a few weeks of use, viewed in Obsidian's graph mode. PACE maintains the wikilink network silently as you talk; the structure is there for you to browse, not something you have to curate.*
+<em>A PACE agent's vault after a few weeks, viewed in Obsidian's graph mode — the wikilink network is maintained silently as you talk.</em>
 
 PACE agents act like experts! They don't just respond. They proactively setup systems and structures to deliver effectively on your goals.
 
@@ -53,7 +53,7 @@ Examples include:
 
    ![A Kanban board built and maintained by a PACE agent in Obsidian](screenshots/pace-systems-structure.png)
 
-   *An Obsidian Kanban view of a project's status, scaffolded and kept current by the agent. PACE agents proactively build visible structures (Kanban, Calendar, Dataview tables, decision logs) so you can read the work at a glance.*
+   <em>An Obsidian Kanban scaffolded and kept current by the agent — PACE agents proactively build visible structures so you can read the work at a glance.</em>
 
 4. **Ends with your imagination:** just like OpenClaw, PACE use cases are wide open and limited to your imagination. Not sure how to best use PACE? Setup a PACE agent specifically to brainstorm ideas. Discuss what you aren't good at, where you need help, and what you don't like doing. Let agents help you work more effectively and efficienctly!
 
@@ -68,11 +68,11 @@ Behind the scenes:
 
 ![A polished portfolio-status response from a PACE agent](screenshots/pace-response-sample.png)
 
-*A real exec-sync briefing produced by a PACE agent. The agent already has the project context in long-term memory, knows your name, and produces something usable without making you re-explain the situation.*
+<em>A real exec-sync briefing produced by a PACE agent — project context already in long-term memory, no re-explaining required.</em>
 
 ![A different PACE agent (Misa) helping with slide content](screenshots/pace-response-sample-agent2.png)
 
-*A separate PACE agent — Misa, ❤️ — running in a different folder, doing slide review. Each agent has its own name, emoji, voice, and persistent memory; they never share context.*
+<em>A separate PACE agent — Misa, ❤️ — in a different folder doing slide review; each agent has its own name, voice, and persistent memory.</em>
 
 **Note:** PACE is intended for Claude Cowork, but due to Cowork's flaky handling of plugins, I recommend using Claude Code in the Claude Desktop App as your interface. It'll give you the same basic experience and should just work.
 
@@ -311,11 +311,11 @@ Force-promotion has one exception: entries tagged `#user`, `#high-signal`, or `#
 
 ![A PACE agent designing a recurring Monday status routine](screenshots/pace-response-sample-2.png)
 
-*When asked for a recurring portfolio briefing, a PACE agent designs the schedule, picks a sensible cadence, asks where the output should land, and confirms before acting.*
+<em>Asked for a recurring portfolio briefing, a PACE agent designs the schedule, picks a sensible cadence, and confirms before acting.</em>
 
 ![Local Routines registered by a PACE agent](screenshots/pace-proactively-created-pace-routines.png)
 
-*The resulting Routines panel. PACE agents register their own daily compaction, weekly review, and heartbeat schedules so you don't have to think about maintenance.*
+<em>The resulting Routines panel — PACE agents auto-register their own daily compaction, weekly review, and heartbeat schedules.</em>
 
 ### Working-memory size budget
 
@@ -500,7 +500,7 @@ When it returns, **open the vault folder in Claude Code** with **"Use a worktree
 
 ![A PACE agent wrapping up identity onboarding in a fresh vault](screenshots/pace-onboarding.png)
 
-*Identity onboarding completing in a freshly-bootstrapped vault. The agent (Bob, ✌️) opts the user into the proactive heartbeat and is ready to start work.*
+<em>Identity onboarding completing in a freshly-bootstrapped vault — Bob, ✌️, opts the user into the proactive heartbeat.</em>
 
 If `pace bootstrap` can't find the plugin install (e.g. you installed it from a custom marketplace), pass `--plugin-root` explicitly:
 
