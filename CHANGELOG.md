@@ -4,6 +4,46 @@ All notable changes to PACE are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.7] — 2026-05-08
+
+### Added
+- **Obsidian hygiene pass in the daily compaction prompt.** The
+  `system/prompts/compact.md` template (`COMPACT_PROMPT` in
+  `pace.onboarding`) now includes a scoped, conservative
+  vault-hygiene step that runs after each daily compaction. The pass
+  is bounded to files modified in the last 24 hours plus their
+  referenced perimeter, and does four things in order: (1) finds
+  missing wikilinks and converts plain mentions of existing entities
+  to `[[…]]`, (2) resolves broken `[[Foo]]` links — stub if real, fix
+  if typo, demote to plain text if premature, (3) marks superseded
+  notes with a "Superseded by [[…]]" header and flags them for the
+  weekly review (never auto-deletes), (4) flags orphans cautiously,
+  letting the weekly review decide on archival. Wrap-up step now
+  appends hygiene deltas (wikilinks added, stubs created, fixes,
+  orphans flagged) to `system/logs/` so the weekly run has a baseline
+  to work from.
+- **"Daily vs weekly division of labor" section** in the compact
+  prompt spelling out what the daily run never does (rename, delete,
+  bulk-archive, validate links across the whole vault) so the model
+  defers those operations to `pace review`.
+
+### Changed
+- Promotion rules and retention exemptions in the compact prompt
+  preserved verbatim — daily-vs-weekly scope is now explicit, but
+  the safety contract is unchanged.
+- Plugin zip rebuilt (`dist/pace-memory.plugin`) so
+  `plugin/system-prompts/compact.md` stays byte-identical to
+  `pace.onboarding.COMPACT_PROMPT` (guarded by
+  `test_scheduled_task_prompts_match_canonical_constants`).
+
+### Notes
+- **Existing vaults are unaffected.** `system/prompts/compact.md` is
+  written at `pace init` time and is not overwritten on plugin
+  upgrade. To pick up the new hygiene steps in an existing vault,
+  copy the new prompt body manually over your local file (or delete
+  it and run `pace init` again — `pace init` is idempotent and will
+  recreate it).
+
 ## [0.3.6] — 2026-05-01
 
 ### Added
