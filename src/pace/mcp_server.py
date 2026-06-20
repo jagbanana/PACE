@@ -691,6 +691,14 @@ def pace_init(root: str | None = None) -> dict[str, Any]:
     Example: ``pace_init()`` — onboarding will pick up CWD/PACE_ROOT.
     """
     if root is not None:
+        # Hardening: a root supplied over MCP can be influenced by injected
+        # content. Reject relative-traversal escapes ("../.."); an absolute
+        # path remains a deliberate operator choice (CLI onboarding).
+        if ".." in Path(root).parts:
+            return {
+                "error": "Refusing a vault root containing '..'.",
+                "initialized": False,
+            }
         target = Path(root).expanduser().resolve()
     else:
         # ``find_vault_root`` returns None when PACE_ROOT points at an

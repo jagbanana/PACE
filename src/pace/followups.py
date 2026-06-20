@@ -260,6 +260,12 @@ def resolve_followup(
             f"resolve_followup status must be 'done' or 'dismissed'; "
             f"got {status!r}."
         )
+    # Hardening: reject ids that aren't the canonical followup-id shape so a
+    # caller-supplied value can't traverse out of followups/ (e.g.
+    # "../../memories/long_term/user") and have the resolved file unlinked
+    # below. Matches the is_valid_id() guard already used in list_followups.
+    if not is_valid_id(fu_id):
+        return None
     src = _path_for(root, fu_id)
     if not src.is_file():
         return None
@@ -286,6 +292,11 @@ def update_status(
             f"'ready'); got {status!r}. Use resolve_followup for done/"
             f"dismissed."
         )
+    # Hardening: same id-shape guard as resolve_followup (defense in depth;
+    # update_status isn't an MCP tool today, but keeps the path-safety
+    # invariant local to this module).
+    if not is_valid_id(fu_id):
+        return None
     src = _path_for(root, fu_id)
     if not src.is_file():
         return None
