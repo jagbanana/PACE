@@ -24,6 +24,10 @@ from pace.io import atomic_write_text
 from pace.paths import LONG_TERM_DIR, PROJECTS_DIR, WORKING_MEMORY
 
 _NON_ALNUM_RE = re.compile(r"[^A-Za-z0-9]+")
+# Project dir names: alnum start, then alnum/_/- only. Mirrors
+# projects._PROJECT_NAME_RE so `project` can't traverse the filesystem when
+# used to build a path here (the create-side already validates; capture didn't).
+_PROJECT_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_\-]*$")
 
 
 def capture(
@@ -50,6 +54,10 @@ def capture(
     target, default_title, project_name = _resolve_target(
         root, kind=kind, topic=topic, project=project, note=note
     )
+    # Hardening: defense-in-depth containment — never write outside the vault
+    # root even if a future caller bypasses the per-kind name validation.
+    if not target.resolve().is_relative_to(root.resolve()):
+        raise ValueError("Refusing to write outside the vault root.")
 
     tags = _normalize_tags(tags or [])
     timestamp = datetime.now().replace(microsecond=0)
@@ -107,6 +115,8 @@ def _resolve_target(
     if kind == "project_summary":
         if not project:
             raise ValueError("project_summary capture requires --project")
+        if not _PROJECT_NAME_RE.match(project):
+            raise ValueError(f"Invalid project name {project!r}.")
         target = root / PROJECTS_DIR / project / "summary.md"
         if not target.is_file():
             raise FileNotFoundError(
@@ -120,6 +130,8 @@ def _resolve_target(
             raise ValueError("project_note capture requires --project")
         if not note:
             raise ValueError("project_note capture requires --note")
+        if not _PROJECT_NAME_RE.match(project):
+            raise ValueError(f"Invalid project name {project!r}.")
         notes_dir = root / PROJECTS_DIR / project / "notes"
         if not notes_dir.is_dir():
             raise FileNotFoundError(
