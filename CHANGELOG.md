@@ -4,6 +4,26 @@ All notable changes to PACE are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.8] — 2026-06-26
+
+### Security
+- **Hardened caller-supplied ids and names against path traversal.**
+  Three values that are used to build filesystem paths but were not
+  validated are now checked, so a tool argument influenced by untrusted
+  content can no longer escape the vault root:
+  - `resolve_followup()` / `update_status()` reject followup ids that
+    aren't the canonical `f-…` shape (`is_valid_id()`). Previously an id
+    like `../memories/long_term/user` resolved out of `followups/` onto
+    an arbitrary `.md` file — and `resolve_followup()` `unlink()`s the
+    resolved file, so it could delete user memory.
+  - `capture()` validates `project` against the same `_PROJECT_NAME_RE`
+    the create-side already enforced, plus a defense-in-depth containment
+    check that refuses to write outside the vault root.
+  - `pace_init()` rejects a `root` containing `..` when supplied over MCP
+    (absolute paths remain a deliberate operator choice for CLI onboarding).
+- Adds `tests/test_path_traversal_hardening.py`. Thanks to @elliotfsl
+  ([#1](https://github.com/jagbanana/PACE/pull/1)).
+
 ## [0.3.7] — 2026-05-08
 
 ### Added
