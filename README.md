@@ -1,4 +1,4 @@
-# PACE — Persistent AI Context Engine
+# PACE: Persistent AI Context Engine
 
 > **A local, human-readable memory system that gives Claude persistence across sessions.**
 > Markdown files. SQLite FTS5. An MCP server. No cloud, no vector DB, no API keys.
@@ -12,16 +12,16 @@
 
 ---
 
-## What PACE is — your evolving Claude coworker
+## What PACE is: your evolving Claude coworker
 
-**Every new Claude session is like onboarding a brand-new intern.** You're sitting across from an incredibly book-smart assistant who knows nothing about your work, your style, your preferences, your business, or the people in your orbit. Tomorrow, same intern. Next month, same intern. Claude Projects and the Desktop app's memory features chip away at this — but neither gives you a system that *grows and evolves with you*, actually learning your decisions, your taste, and the texture of your business over weeks and months.
+**Every new Claude session is like onboarding a brand-new intern.** You're sitting across from an incredibly book-smart assistant who knows nothing about your work, your style, your preferences, your business, or the people in your orbit. Tomorrow, same intern. Next month, same intern. Claude Projects and the Desktop app's memory features chip away at this, but neither gives you a system that *grows and evolves with you*, actually learning your decisions, your taste, and the texture of your business over weeks and months.
 
 PACE solves that. 
 
 It lets you stand up **individual, named coworkers**, each with its own personality and its own persistent memory. PACE agents mature from intern, to junior, to senior over the course of weeks of real work.
 
-- Installs as a single Claude Desktop App plugin — upload one file and you're done
-- Run multiple PACE agents on the same machine — one folder per agent, each with its own name, personality, and persistent memory
+- Installs as a single Claude Desktop App plugin. Upload one file and you're done
+- Run multiple PACE agents on the same machine: one folder per agent, each with its own name, personality, and persistent memory
 - Each PACE agent can handle multiple projects, just like real humans
 - Natural language onboarding, no technical configuration
 - Learns your work style, preferences, and project details, evolving to you and the job
@@ -31,19 +31,19 @@ It lets you stand up **individual, named coworkers**, each with its own personal
 - Performs its own maintenance, staying performant via indexing and linking
 - Everything is human-readable via Obsidian
 
-![A PACE agent's memory graph in Obsidian — working notes, long-term entries, weekly reviews, and projects all interlinked via wikilinks](screenshots/pace-auto-maintenance-memory-mapping.png)
+![A PACE agent's memory graph in Obsidian: working notes, long-term entries, weekly reviews, and projects all interlinked via wikilinks](screenshots/pace-auto-maintenance-memory-mapping.png)
 
-<em>A PACE agent's vault after a few weeks, viewed in Obsidian's graph mode — the wikilink network is maintained silently as you talk.</em>
+<em>A PACE agent's vault after a few weeks, viewed in Obsidian's graph mode. The wikilink network is maintained silently as you talk.</em>
 
 PACE agents act like experts! They don't just respond. They proactively setup systems and structures to deliver effectively on your goals.
 
-The model behind it is the human one: each PACE coworker handles 3–4 projects for you, just like a real employee, and you bring them up the curve over time. Each has a name, an emoji, and a voice; each remembers the last conversation, the last decision, and why you made it. You can stand up several at once — one per folder, each with its own scope (e.g. `~/agents/Misa` for marketing work, `~/agents/Bob` for research) — and they stay completely separate.
+The model behind it is the human one: each PACE coworker handles 3–4 projects for you, just like a real employee, and you bring them up the curve over time. Each has a name, an emoji, and a voice; each remembers the last conversation, the last decision, and why you made it. You can stand up several at once, one per folder, each with its own scope (e.g. `~/agents/Misa` for marketing work, `~/agents/Bob` for research), and they stay completely separate.
 
 PACE provides the core **persistent-agent capabilities** you'd find in projects like OpenClaw, but packaged as a Claude Code plugin and aimed at mature, day-to-day business use rather than experimental tinkering. The vault is plain Markdown on your local disk, the storage is human-readable and grep-able, and nothing is hidden from you.
 
 ### Business use cases
 
-It's built for **knowledge work** — research, marketing, planning, strategy, anything multi-week. You **never type a slash command.** You just talk to Claude. 
+It's built for **knowledge work**: research, marketing, planning, strategy, anything multi-week. You **never type a slash command.** You just talk to Claude. 
 
 Examples include:
 
@@ -53,7 +53,7 @@ Examples include:
 
    ![A Kanban board built and maintained by a PACE agent in Obsidian](screenshots/pace-systems-structure.png)
 
-   <em>An Obsidian Kanban scaffolded and kept current by the agent — PACE agents proactively build visible structures so you can read the work at a glance.</em>
+   <em>An Obsidian Kanban scaffolded and kept current by the agent. PACE agents proactively build visible structures so you can read the work at a glance.</em>
 
 4. **Ends with your imagination:** just like OpenClaw, PACE use cases are wide open and limited to your imagination. Not sure how to best use PACE? Setup a PACE agent specifically to brainstorm ideas. Discuss what you aren't good at, where you need help, and what you don't like doing. Let agents help you work more effectively and efficienctly!
 
@@ -68,11 +68,11 @@ Behind the scenes:
 
 ![A polished portfolio-status response from a PACE agent](screenshots/pace-response-sample.png)
 
-<em>A real exec-sync briefing produced by a PACE agent — project context already in long-term memory, no re-explaining required.</em>
+<em>A real exec-sync briefing produced by a PACE agent: project context already in long-term memory, no re-explaining required.</em>
 
 ![A different PACE agent (Misa) helping with slide content](screenshots/pace-response-sample-agent2.png)
 
-<em>A separate PACE agent — Misa, ❤️ — in a different folder doing slide review; each agent has its own name, voice, and persistent memory.</em>
+<em>A separate PACE agent (Misa, ❤️) in a different folder doing slide review; each agent has its own name, voice, and persistent memory.</em>
 
 **Note:** PACE is intended for Claude Cowork, but due to Cowork's flaky handling of plugins, I recommend using Claude Code in the Claude Desktop App as your interface. It'll give you the same basic experience and should just work.
 
@@ -80,11 +80,11 @@ Behind the scenes:
 
 - **Not a coding assistant memory tool.** Code lives in git; PACE captures the soft context around it (decisions, preferences, identifiers, relationships).
 - **Not a cloud service.** Everything is local files. No credentials, no syncing through Anthropic's servers, no telemetry.
-- **Not a vector DB.** PACE uses SQLite FTS5 for keyword + ranked search. It's fast, debuggable, and zero-config; if you want semantic recall, layer it on top — the vault is just Markdown.
+- **Not a vector DB.** PACE uses SQLite FTS5 for keyword + ranked search. It's fast, debuggable, and zero-config; if you want semantic recall, layer it on top; the vault is just Markdown.
 
 ### Status
 
-v0.3.6 — beta. Targets **Claude Code** as the primary client. Multiple PACE agents per machine (one per folder) supported as of 0.3.0; first-vault setup is a single CLI command (`pace bootstrap <path>`) as of 0.3.6 — the conversational "Onboard me to PACE" path is still wired up but recommended only as a fallback. Cowork support exists but has known technical challenges getting Cowork to recognize the MCP tools (see [Cowork status](#cowork-status) below).
+v0.3.6, beta. Targets **Claude Code** as the primary client. Multiple PACE agents per machine (one per folder) supported as of 0.3.0; first-vault setup is a single CLI command (`pace bootstrap <path>`) as of 0.3.6. The conversational "Onboard me to PACE" path is still wired up but recommended only as a fallback. Cowork support exists but has known technical challenges getting Cowork to recognize the MCP tools (see [Cowork status](#cowork-status) below).
 
 230+ tests cover capture, search, compaction, review, the proactive heartbeat, multi-vault resolution, and the MCP surface. Used daily by the maintainer. Mac dogfood pending; Windows + OneDrive is the primary target.
 
@@ -127,7 +127,7 @@ PACE has four moving parts that all read from and write to a folder of Markdown 
                                                         first reply
 ```
 
-The MCP server and the CLI are thin wrappers over the same Python functions — there's a single source of truth for every read and every write.
+The MCP server and the CLI are thin wrappers over the same Python functions. There's a single source of truth for every read and every write.
 
 ### The vault on disk
 
@@ -171,7 +171,7 @@ your-vault/
 └── CLAUDE.md                      ← session-start instructions for the model
 ```
 
-Every file is plain Markdown with **YAML frontmatter** describing kind, tags, source, and timestamps. Every entry uses **`[[Wikilinks]]`** for cross-references and **`#tags`** for retrieval. The vault is browsable, editable, and grep-able by hand. SQLite is purely an index over what's already in Markdown — delete it and `pace reindex` rebuilds from disk.
+Every file is plain Markdown with **YAML frontmatter** describing kind, tags, source, and timestamps. Every entry uses **`[[Wikilinks]]`** for cross-references and **`#tags`** for retrieval. The vault is browsable, editable, and grep-able by hand. SQLite is purely an index over what's already in Markdown; delete it and `pace reindex` rebuilds from disk.
 
 ### How a session flows
 
@@ -229,18 +229,18 @@ So PACE separates memory into tiers, only loads the smallest one at session star
 | **Working** (`memories/working/`) | **Always**, via `pace_status` at session start | Today's captures, ephemeral notes, anything not yet promoted | Every `pace_capture` defaults here |
 | **Long-term** (`memories/long_term/`) | On demand, via `pace_search` | Stable facts about people, identifiers, decisions, preferences, business context | Daily compaction promotes from working; identity-pin captures land here directly |
 | **Project** (`projects/<name>/`) | On demand, via `pace_load_project` | A project's `summary.md` plus topical notes; loaded as a unit when the user mentions the project | Created by `pace_create_project`; populated by captures with `kind=project_summary` or `project_note` |
-| **Followups** (`followups/`) | **Ready items always**, via `pace_status.inbox` at session start | Proactive things to resurface — dated reminders, stale commitments, recurring patterns the heartbeat noticed | `pace_add_followup` (manual), or the heartbeat scanner (auto). Resolved items move to `followups/done/` |
+| **Followups** (`followups/`) | **Ready items always**, via `pace_status.inbox` at session start | Proactive things to resurface: dated reminders, stale commitments, recurring patterns the heartbeat noticed | `pace_add_followup` (manual), or the heartbeat scanner (auto). Resolved items move to `followups/done/` |
 | **Archived** (`memories/archived/`) | Never (search-only) | Long-term entries that aged out without being referenced | Weekly review moves stale entries here; nothing is ever deleted |
 
 ### What gets captured (and what doesn't)
 
 The model is instructed to capture **only durable context** worth having next session:
 
-✅ **Capture** — names, roles, identifiers (account numbers, ticker symbols, slugs), key dates, decisions ("we picked option B because…"), validated approaches, corrections to earlier mistakes, business facts, anything tagged `#high-signal` or `#decision`.
+✅ **Capture**: names, roles, identifiers (account numbers, ticker symbols, slugs), key dates, decisions ("we picked option B because…"), validated approaches, corrections to earlier mistakes, business facts, anything tagged `#high-signal` or `#decision`.
 
-❌ **Skip** — debugging chatter, filler, code already in git, generic how-to answers, anything cross-folder that belongs in the client's own auto-memory rather than this PACE root.
+❌ **Skip**: debugging chatter, filler, code already in git, generic how-to answers, anything cross-folder that belongs in the client's own auto-memory rather than this PACE root.
 
-The standard tag set is small: `#person`, `#identifier`, `#date`, `#user`, `#business`, `#preference`, `#decision`, `#high-signal`. Tags drive both retrieval *and* retention — three of them are exempt from auto-archival (see below).
+The standard tag set is small: `#person`, `#identifier`, `#date`, `#user`, `#business`, `#preference`, `#decision`, `#high-signal`. Tags drive both retrieval *and* retention; three of them are exempt from auto-archival (see below).
 
 ### Capture flow
 
@@ -268,15 +268,15 @@ The standard tag set is small: `#person`, `#identifier`, `#date`, `#user`, `#bus
 
 Every write is atomic (`pace.io.atomic_write_text`) so a crashed sync engine or an antivirus scanner can't leave the vault half-written.
 
-### Lazy maintenance — compaction, review, and heartbeat at session start
+### Lazy maintenance: compaction, review, and heartbeat at session start
 
-PACE has no external scheduler — no cron, no Windows Task Scheduler, no Cowork scheduled-task system. Instead, every `pace_status` call returns three flags:
+PACE has no external scheduler: no cron, no Windows Task Scheduler, no Cowork scheduled-task system. Instead, every `pace_status` call returns three flags:
 
-- `needs_compact` — true if 24h+ since the last compaction
-- `needs_review` — true if 7d+ since the last weekly review
-- `needs_heartbeat` — true if the heartbeat is opted-in and ready to fire
+- `needs_compact`: true if 24h+ since the last compaction
+- `needs_review`: true if 7d+ since the last weekly review
+- `needs_heartbeat`: true if the heartbeat is opted-in and ready to fire
 
-Claude reads these at session start and runs whatever's flagged **silently in the next turn after replying to your first message** — so you greet your coworker normally, get an instant response, and the maintenance happens in the background while you decide what to ask next.
+Claude reads these at session start and runs whatever's flagged **silently in the next turn after replying to your first message**. So you greet your coworker normally, get an instant response, and the maintenance happens in the background while you decide what to ask next.
 
 ```
    ┌────────────────────────────────────────────────────────┐
@@ -299,7 +299,7 @@ Claude reads these at session start and runs whatever's flagged **silently in th
    └────────────────────────────────────────────────────────┘
 ```
 
-**Promotion rules** are conservative — an entry is promoted to long-term when:
+**Promotion rules** are conservative: an entry is promoted to long-term when:
 
 - it's at least N days old (configurable; default 1) **and** has been referenced from another file, **OR**
 - it carries a long-term tag (`#person`, `#identifier`, `#decision`, `#high-signal`), **OR**
@@ -307,7 +307,7 @@ Claude reads these at session start and runs whatever's flagged **silently in th
 
 Force-promotion has one exception: entries tagged `#user`, `#high-signal`, or `#decision` are **never** force-evicted. This is what lets PACE keep a pinned identity entry (your name, the assistant's nickname and emoji) at the top of working memory forever.
 
-**Optional: Routines for predictable schedules.** Lazy in-session maintenance is the default and needs no setup, but if you'd rather have maintenance fire on a clock — or if you want recurring user-facing briefings — PACE agents can register Claude Code Local Routines and ask before scheduling them.
+**Optional: Routines for predictable schedules.** Lazy in-session maintenance is the default and needs no setup, but if you'd rather have maintenance fire on a clock, or if you want recurring user-facing briefings, PACE agents can register Claude Code Local Routines and ask before scheduling them.
 
 ![A PACE agent designing a recurring Monday status routine](screenshots/pace-response-sample-2.png)
 
@@ -315,7 +315,7 @@ Force-promotion has one exception: entries tagged `#user`, `#high-signal`, or `#
 
 ![Local Routines registered by a PACE agent](screenshots/pace-proactively-created-pace-routines.png)
 
-<em>The resulting Routines panel — PACE agents auto-register their own daily compaction, weekly review, and heartbeat schedules.</em>
+<em>The resulting Routines panel: PACE agents auto-register their own daily compaction, weekly review, and heartbeat schedules.</em>
 
 ### Working-memory size budget
 
@@ -340,9 +340,9 @@ Working memory is loaded in full on every `pace_status` call, so its size matter
                           └─────────────────────────┘
 ```
 
-This means **the model's session-start payload is bounded** even if you haven't opened Claude Code in a week. Truncation is non-destructive — older entries stay on disk and surface via `pace_search`.
+This means **the model's session-start payload is bounded** even if you haven't opened Claude Code in a week. Truncation is non-destructive; older entries stay on disk and surface via `pace_search`.
 
-### Weekly review — archiving the genuinely stale
+### Weekly review: archiving the genuinely stale
 
 When `needs_review` is set (7d+ since last run), Claude runs the weekly review with the same lazy plan/apply ritual as compaction. It looks at every long-term entry and asks two questions:
 
@@ -351,11 +351,11 @@ When `needs_review` is set (7d+ since last run), Claude runs the weekly review w
 
 If both are yes **and** the entry doesn't carry a retention-exempt tag (`#user`, `#high-signal`, `#decision`), the review proposes moving it to `memories/archived/`. The maintainer (Claude, in this case) reviews the proposal before applying. Nothing is ever deleted; archived files remain searchable.
 
-Review also writes a short synthesis note for the week — themes that emerged across captures, decisions made, anything worth surfacing.
+Review also writes a short synthesis note for the week: themes that emerged across captures, decisions made, anything worth surfacing.
 
-### Proactive heartbeat — useful nudges, never naggy *(opt-in, v0.2)*
+### Proactive heartbeat: useful nudges, never naggy *(opt-in, v0.2)*
 
-Most memory systems are passive: they remember things if you ask. PACE has an optional **heartbeat** that goes one step further — it quietly checks during your work hours for things worth flagging, and surfaces them at the **start of your *next* session**. It never interrupts mid-conversation, never sends OS notifications, and the default outcome of any single run is silence.
+Most memory systems are passive: they remember things if you ask. PACE has an optional **heartbeat** that goes one step further: it quietly checks during your work hours for things worth flagging, and surfaces them at the **start of your *next* session**. It never interrupts mid-conversation, never sends OS notifications, and the default outcome of any single run is silence.
 
 You opt in during onboarding and define your working hours (default: 9:00–17:00, Mon–Fri). When you next open Claude Code inside that window and `pace_status` flips `needs_heartbeat: true`, the scanner runs lazily in the same way as compaction. It looks at three signals:
 
@@ -364,11 +364,11 @@ You opt in during onboarding and define your working hours (default: 9:00–17:0
    │ pace heartbeat --plan         (in-session, when          │
    │                                pace_status flags it)     │
    │                                                          │
-   │   1. Ripe date triggers — pending followups whose date   │
+   │   1. Ripe date triggers - pending followups whose date   │
    │      arrived → flip to ready                             │
-   │   2. Stale commitments — TODO/"I'll …"/"let's …" entries │
+   │   2. Stale commitments - TODO/"I'll …"/"let's …" entries │
    │      older than N days with no follow-through            │
-   │   3. Patterns — repeated person mentions not yet in      │
+   │   3. Patterns - repeated person mentions not yet in      │
    │      long-term, clusters of similar #decision entries    │
    └─────────────────────┬────────────────────────────────────┘
                          │  (Claude reviews; default = skip;
@@ -386,7 +386,7 @@ You opt in during onboarding and define your working hours (default: 9:00–17:0
    │   inbox: [{id, body, priority, ...}, ...]                │
    │                                                          │
    │ Model surfaces them at the top of its first reply        │
-   │ ("oh — you asked me to flag the legal review today")     │
+   │ ("oh, you asked me to flag the legal review today")      │
    │ then resolves each via pace_resolve_followup once acted  │
    │ on.                                                      │
    └──────────────────────────────────────────────────────────┘
@@ -407,7 +407,7 @@ priority: high         # low | normal | high
 created: 2026-04-29T10:37:45
 project: q3-launch     # optional
 ---
-The legal review is due Friday — flag it that morning.
+The legal review is due Friday, flag it that morning.
 ```
 
 Resolved followups move under `followups/done/` (status preserved for audit). Nothing is ever deleted.
@@ -427,11 +427,11 @@ heartbeat:
   pattern_min_repeats: 3        # repeated mentions to surface
 ```
 
-You can opt out at any time by flipping `enabled: false` — `pace_status.needs_heartbeat` will return `false` and the scanner is dormant.
+You can opt out at any time by flipping `enabled: false`; `pace_status.needs_heartbeat` will return `false` and the scanner is dormant.
 
 ### Project context switching
 
-When you say *"let's work on the redesign"* — or anything topical that hints at a known project — the model:
+When you say *"let's work on the redesign"*, or anything topical that hints at a known project, the model:
 
 1. Calls `pace_search` with your phrase to surface candidate projects.
 2. Calls `pace_load_project` with the resolved name. That:
@@ -455,7 +455,7 @@ The MCP server figures out which vault to talk to via this chain (first hit wins
 
 This is what makes **multi-agent** safe. Each initialized vault writes its own `.mcp.json` pinning `PACE_ROOT` to itself, so opening `~/agents/Misa` always resolves to Misa and opening `~/agents/Bob` always resolves to Bob. For a brand-new folder with no `.mcp.json` yet, the cwd walk-up fails, `pace_status` returns `initialized: false`, and onboarding initializes the folder you opened.
 
-The CLI uses the same chain plus a fourth step — `%APPDATA%\pace\config.json` (Windows) or `~/.config/pace/config.json` — as a fallback so `pace status` from any directory hits a sane default. The MCP server skips that step on purpose, so a session opened in one folder can never leak another vault's identity.
+The CLI uses the same chain plus a fourth step, `%APPDATA%\pace\config.json` (Windows) or `~/.config/pace/config.json`, as a fallback so `pace status` from any directory hits a sane default. The MCP server skips that step on purpose, so a session opened in one folder can never leak another vault's identity.
 
 ---
 
@@ -474,7 +474,7 @@ Three steps. Total time: under a minute, plus a Claude Desktop restart.
 
 After installing `uv`, fully quit and relaunch the Claude Desktop App so the new `PATH` propagates.
 
-### Stand up your first vault — one CLI command
+### Stand up your first vault: one CLI command
 
 The plugin install above gets `pace-memory.exe` and `uv` on your PATH but does **not** automatically prep a vault folder. Use `pace bootstrap` to do that in one shot:
 
@@ -494,13 +494,13 @@ That command:
 2. Runs `uv tool install --force <plugin>/server` so `pace-mcp.exe` lands persistently in `~/.local/bin/` (sub-100ms MCP launches; survives `uv cache clean`).
 3. Creates the vault directory and runs `pace init --plugin-root <plugin>` against it. Writes a project-level `.mcp.json` pointing at the persistent `pace-mcp.exe`.
 
-When it returns, **open the vault folder in Claude Code** with **"Use a worktree"** unchecked. The PACE MCP tools (`pace_status`, `pace_capture`, …) load on session start. Greet Claude normally — the SKILL runs a brief identity onboarding (your name; an optional nickname/emoji for the assistant; the work you'll do here) the first time, captures it via the now-loaded MCP, and then just talks.
+When it returns, **open the vault folder in Claude Code** with **"Use a worktree"** unchecked. The PACE MCP tools (`pace_status`, `pace_capture`, …) load on session start. Greet Claude normally. The SKILL runs a brief identity onboarding (your name; an optional nickname/emoji for the assistant; the work you'll do here) the first time, captures it via the now-loaded MCP, and then just talks.
 
-> **Cold-start quirk**: on the very first message in a brand-new vault, Claude Code may briefly report "no PACE tools available." This is a Claude Code MCP-launcher race that affects any project with a project-level `.mcp.json`. Just send a follow-up message — the tools will be connected by the time the second message lands, and every subsequent session loads them instantly. Harmless; nothing to fix on the PACE side.
+> **Cold-start quirk**: on the very first message in a brand-new vault, Claude Code may briefly report "no PACE tools available." This is a Claude Code MCP-launcher race that affects any project with a project-level `.mcp.json`. Just send a follow-up message; the tools will be connected by the time the second message lands, and every subsequent session loads them instantly. Harmless; nothing to fix on the PACE side.
 
 ![A PACE agent wrapping up identity onboarding in a fresh vault](screenshots/pace-onboarding.png)
 
-<em>Identity onboarding completing in a freshly-bootstrapped vault — Bob, ✌️, opts the user into the proactive heartbeat.</em>
+<em>Identity onboarding completing in a freshly-bootstrapped vault. Bob (✌️) opts the user into the proactive heartbeat.</em>
 
 If `pace bootstrap` can't find the plugin install (e.g. you installed it from a custom marketplace), pass `--plugin-root` explicitly:
 
@@ -523,11 +523,11 @@ Open whichever folder matches the work you're doing today; that agent's memory l
 
 #### About the conversational "Onboard me to PACE" path
 
-A skill in the plugin recognizes phrases like *"Set up PACE"* / *"Onboard me to PACE"* / *"Make this a PACE vault"* and tries to walk a fresh folder through the same bootstrap as `pace bootstrap`. It works some of the time, but Claude Code's skill activation for user-uploaded plugins is currently inconsistent — that's why the CLI command above is the recommended path. If you're already deep in a chat session and want to try it conversationally, `/pace-memory:pace-setup` and the natural-language phrases above are still wired up.
+A skill in the plugin recognizes phrases like *"Set up PACE"* / *"Onboard me to PACE"* / *"Make this a PACE vault"* and tries to walk a fresh folder through the same bootstrap as `pace bootstrap`. It works some of the time, but Claude Code's skill activation for user-uploaded plugins is currently inconsistent; that's why the CLI command above is the recommended path. If you're already deep in a chat session and want to try it conversationally, `/pace-memory:pace-setup` and the natural-language phrases above are still wired up.
 
 ### Cowork status
 
-PACE was originally built for Claude Cowork (the agent-mode tab in the same Desktop app). On v0.1.x, the Cowork plugin path worked. **On v0.2.0+, the Cowork plugin loads but its MCP server doesn't start** — the cause is somewhere in Cowork's account-marketplace upload pipeline, not in PACE itself (the bundled server runs fine when invoked directly). Tracked at [github.com/jagbanana/PACE/issues](https://github.com/jagbanana/PACE/issues). For now, **use Claude Code.**
+PACE was originally built for Claude Cowork (the agent-mode tab in the same Desktop app). On v0.1.x, the Cowork plugin path worked. **On v0.2.0+, the Cowork plugin loads but its MCP server doesn't start**. The cause is somewhere in Cowork's account-marketplace upload pipeline, not in PACE itself (the bundled server runs fine when invoked directly). Tracked at [github.com/jagbanana/PACE/issues](https://github.com/jagbanana/PACE/issues). For now, **use Claude Code.**
 
 ### Power-user install (from source)
 
@@ -553,7 +553,7 @@ The model uses MCP tools; humans use the CLI. They share the same underlying fun
 | Command | Purpose |
 |---|---|
 | `pace bootstrap <path>` | One-shot first-vault setup: auto-discovers the plugin install, runs `uv tool install`, scaffolds the vault, writes a durable `.mcp.json`. The recommended install path. |
-| `pace init [--root <path>] [--plugin-root <path>]` | Scaffold an empty vault (lower-level than `bootstrap` — does not run `uv tool install`). Idempotent. |
+| `pace init [--root <path>] [--plugin-root <path>]` | Scaffold an empty vault (lower-level than `bootstrap`; does not run `uv tool install`). Idempotent. |
 | `pace status` | File counts, last-task timestamps, health summary. |
 | `pace capture --kind <k> [--topic <t>] [--project <p>] [--note <n>] [--tag ...] "<text>"` | Persist content. Kinds: `working`, `long_term`, `project_summary`, `project_note`. |
 | `pace search "<query>" [--scope memory\|projects\|all] [--project <p>]` | FTS5 search; ranked snippets. |
@@ -581,11 +581,11 @@ python scripts/build_plugin.py
 # → dist/pace-memory.plugin
 ```
 
-The build script writes a single file: `dist/pace-memory.plugin`. **That file *is* the plugin zip** — same archive format as `.zip`, just named with the `.plugin` extension Anthropic's plugin spec uses. There's no separate `.zip` artifact.
+The build script writes a single file: `dist/pace-memory.plugin`. **That file *is* the plugin zip**: same archive format as `.zip`, just named with the `.plugin` extension Anthropic's plugin spec uses. There's no separate `.zip` artifact.
 
 What the script does:
 
-1. **Stages** the runtime Python source into a temp directory — `src/pace/`, `pyproject.toml`, `LICENSE`, plus a minimal in-zip `README.md`. The temp dir lives outside the source tree (and outside OneDrive) so file locking can't fight us.
+1. **Stages** the runtime Python source into a temp directory: `src/pace/`, `pyproject.toml`, `LICENSE`, plus a minimal in-zip `README.md`. The temp dir lives outside the source tree (and outside OneDrive) so file locking can't fight us.
 2. **Sanity-checks** that `plugin/.claude-plugin/plugin.json`'s `version` matches `pace.__version__` so a forgotten bump fails loudly.
 3. **Zips** `plugin/` plus the staged source (under the `server/` arc-name prefix) into `dist/pace-memory.plugin`.
 
@@ -611,7 +611,7 @@ There are 220+ tests covering capture, search, compaction, review, the proactive
 ```
 src/pace/         # Python package: CLI, MCP server, indexer, etc.
 tests/            # pytest suite
-plugin/           # Claude Code plugin source — bundled into pace-memory.plugin
+plugin/           # Claude Code plugin source, bundled into pace-memory.plugin
   ├── .claude-plugin/plugin.json
   ├── .mcp.json
   ├── skills/pace-memory/    # SKILL.md the model loads at session start
@@ -622,7 +622,7 @@ LICENSE
 README.md
 ```
 
-The runtime vault directories (`memories/`, `projects/`, `system/`) are created by `pace init` and gitignored. This source repo can double as a runnable vault — clone it, run `pace init`, and you're set.
+The runtime vault directories (`memories/`, `projects/`, `system/`) are created by `pace init` and gitignored. This source repo can double as a runnable vault: clone it, run `pace init`, and you're set.
 
 ---
 
@@ -644,11 +644,11 @@ If you went the power-user / "from source" route, check that `.mcp.json` exists 
 
 ### "OneDrive produced N conflicted-copy files"
 
-`pace doctor` flagged `conflicted-copies`. Two devices wrote divergent versions of the same file. PACE never picks a winner — open both, merge by hand, then `pace archive <path-to-loser>` to preserve the discarded version.
+`pace doctor` flagged `conflicted-copies`. Two devices wrote divergent versions of the same file. PACE never picks a winner: open both, merge by hand, then `pace archive <path-to-loser>` to preserve the discarded version.
 
 ### "Compaction hasn't run in Nd Nh"
 
-Compaction runs lazily at session start. If you haven't opened Claude Code in a while, the next time you do, Claude will run compaction silently after replying to your first message. There's nothing to schedule or fix. If `pace doctor` is flagging it as truly stale (weeks), confirm `pace_status` returns `needs_compact: true` — if it does, the next session will catch up.
+Compaction runs lazily at session start. If you haven't opened Claude Code in a while, the next time you do, Claude will run compaction silently after replying to your first message. There's nothing to schedule or fix. If `pace doctor` is flagging it as truly stale (weeks), confirm `pace_status` returns `needs_compact: true`; if it does, the next session will catch up.
 
 ### "N file(s) modified on disk after last index"
 
@@ -666,9 +666,9 @@ You're running pytest outside the venv. Activate it (`.venv\Scripts\activate`) a
 
 ## Platform support
 
-- **Windows 11** with Claude Code — primary target.
-- **macOS** — should work; the only Windows-specific code path is `pace doctor`'s OneDrive virtualization check, which is gated by `sys.platform`. Mac dogfood pending.
-- **OneDrive** — supported, but the PACE root must be configured "Always keep on this device." `pace doctor` verifies this.
+- **Windows 11** with Claude Code: primary target.
+- **macOS**: should work; the only Windows-specific code path is `pace doctor`'s OneDrive virtualization check, which is gated by `sys.platform`. Mac dogfood pending.
+- **OneDrive**: supported, but the PACE root must be configured "Always keep on this device." `pace doctor` verifies this.
 
 ## Design tenets
 
