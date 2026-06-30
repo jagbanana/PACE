@@ -18,7 +18,7 @@
 
 PACE solves that. 
 
-<video src="https://github.com/jagbanana/PACE/raw/main/videos/PACE_overview.mp4" controls muted playsinline width="100%"></video>
+https://github.com/user-attachments/assets/1cb806d4-50a2-41b8-b8e6-9308690a83b8
 
 <em>A quick look at PACE in action: a named coworker recalling context and growing across sessions.</em>
 
