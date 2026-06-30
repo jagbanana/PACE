@@ -18,6 +18,10 @@
 
 PACE solves that. 
 
+<video src="https://github.com/jagbanana/PACE/raw/main/videos/PACE_overview.mp4" controls muted playsinline width="100%"></video>
+
+<em>A quick look at PACE in action: a named coworker recalling context and growing across sessions.</em>
+
 It lets you stand up **individual, named coworkers**, each with its own personality and its own persistent memory. PACE agents mature from intern, to junior, to senior over the course of weeks of real work.
 
 - Installs as a single Claude Desktop App plugin. Upload one file and you're done
