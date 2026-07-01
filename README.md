@@ -18,7 +18,7 @@
 
 PACE solves that. 
 
-https://github.com/user-attachments/assets/1cb806d4-50a2-41b8-b8e6-9308690a83b8
+https://github.com/user-attachments/assets/b1118cf9-df3f-4a10-be18-d26124a23e5c
 
 <em>A quick look at PACE in action: a named coworker recalling context and growing across sessions.</em>
 
