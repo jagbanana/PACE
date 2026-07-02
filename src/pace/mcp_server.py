@@ -692,14 +692,30 @@ def pace_init(root: str | None = None) -> dict[str, Any]:
     """
     if root is not None:
         # Hardening: a root supplied over MCP can be influenced by injected
-        # content. Reject relative-traversal escapes ("../.."); an absolute
-        # path remains a deliberate operator choice (CLI onboarding).
+        # content. Reject relative-traversal escapes ("../..").
         if ".." in Path(root).parts:
             return {
                 "error": "Refusing a vault root containing '..'.",
                 "initialized": False,
             }
         target = Path(root).expanduser().resolve()
+        # Defense-in-depth: an explicit root is the injection lever (the
+        # Cowork onboarding flow legitimately passes a user-named path).
+        # Refuse to scaffold PACE files + a git repo into a directory that
+        # already holds unrelated content — legitimate targets are a fresh/
+        # empty folder or an existing vault being re-initialized. The env/
+        # cwd branch below is the folder the operator/Claude Code already
+        # opened, so it stays trusted and may contain the user's files.
+        if target.is_dir() and not is_initialized(target) and any(target.iterdir()):
+            return {
+                "error": (
+                    f"Refusing to initialize a vault in non-empty directory "
+                    f"{target} that isn't already a PACE vault. Point at a "
+                    "fresh empty folder, or run `pace init` from the CLI if "
+                    "this is intended."
+                ),
+                "initialized": False,
+            }
     else:
         # ``find_vault_root`` returns None when PACE_ROOT points at an
         # uninitialized directory — which is exactly the case ``pace_init``
