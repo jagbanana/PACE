@@ -355,7 +355,11 @@ def search(scope: str | None, project: str | None, limit: int, query: str) -> No
     """Search the vault index using FTS5."""
     root = require_vault_root()
     with _open_index(root) as idx:
-        hits = idx.search(query, scope=scope, project=project, limit=limit)
+        try:
+            hits = idx.search(query, scope=scope, project=project, limit=limit)
+        except ValueError as exc:
+            # Bad --scope or malformed FTS5 query (SearchQueryError).
+            raise click.ClickException(str(exc)) from exc
 
     if not hits:
         click.echo("No results.")

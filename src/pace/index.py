@@ -63,6 +63,18 @@ CREATE TABLE IF NOT EXISTS config (
 """
 
 
+class SearchQueryError(ValueError):
+    """The FTS5 query string was syntactically invalid.
+
+    Subclasses :class:`ValueError` so callers that already guard search
+    against bad ``scope`` values catch malformed-query errors too. The
+    model composes FTS5 queries freely (unbalanced quotes, a bare
+    ``AND``, a lone ``*``), and SQLite raises ``OperationalError`` on
+    those — we translate it here so a bad query is a handled "no valid
+    query" outcome, not an unhandled tool crash.
+    """
+
+
 @dataclass(frozen=True)
 class SearchHit:
     """A single FTS5 result row, ready to display or hand back over MCP."""
@@ -115,6 +127,13 @@ class Index:
         cur.execute("PRAGMA journal_mode = WAL;")
         cur.execute("PRAGMA synchronous = NORMAL;")
         cur.execute("PRAGMA foreign_keys = ON;")
+        # Multiple Cowork/Claude windows may share one vault (PRD §7.3).
+        # WAL gives concurrent readers + one writer, but a second *writer*
+        # (e.g. two captures from different windows) would otherwise hit an
+        # immediate "database is locked" OperationalError. A short busy
+        # timeout makes the loser wait for the writer to finish instead of
+        # failing — writes here are sub-millisecond, so 5s is ample.
+        cur.execute("PRAGMA busy_timeout = 5000;")
         cur.close()
 
     def _apply_schema(self) -> None:
@@ -436,7 +455,16 @@ class Index:
         sql.append("ORDER BY rank LIMIT ?")
         params.append(limit)
 
-        rows = self._conn.execute("\n".join(sql), params).fetchall()
+        try:
+            rows = self._conn.execute("\n".join(sql), params).fetchall()
+        except sqlite3.OperationalError as exc:
+            # FTS5 raises OperationalError for malformed MATCH syntax
+            # (e.g. unbalanced quotes, trailing boolean operator). Surface
+            # it as a clean, catchable query error rather than letting the
+            # raw sqlite exception escape to the MCP tool / CLI.
+            raise SearchQueryError(
+                f"Invalid search query {query!r}: {exc}"
+            ) from exc
         return [
             SearchHit(
                 path=row["path"],

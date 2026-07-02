@@ -39,6 +39,8 @@ from pathlib import Path
 
 import yaml
 
+from pace.io import atomic_write_text
+
 # Default char budgets. Char-counting (not token-counting) is a
 # deliberate choice: a 4:1 char-to-token ratio is a fine approximation
 # for English prose and avoids pulling in a tokenizer dependency.
@@ -141,8 +143,10 @@ def write_default_if_missing(root: Path) -> Path | None:
     path = root / SETTINGS_FILE
     if path.is_file():
         return None
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(_DEFAULT_YAML, encoding="utf-8")
+    # Atomic write (temp + fsync + rename) so a crash or OneDrive sync
+    # mid-write can't leave a half-written config in the synced vault —
+    # the same invariant every other vault write upholds.
+    atomic_write_text(path, _DEFAULT_YAML)
     return path
 
 
