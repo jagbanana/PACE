@@ -133,6 +133,35 @@ def test_broken_wikilinks_clean_when_all_resolve(
     assert issues == []
 
 
+def test_broken_wikilinks_uses_index_not_disk(
+    vault: Path, index: Index, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The check runs on every pace_status call, so it reads bodies from
+    the index rather than re-reading every file. Prove it: once the entry
+    is captured (and indexed), disk reads shouldn't be needed to find the
+    broken link."""
+    project_ops.create_project(vault, "Alpha", index=index)
+    capture(
+        vault,
+        kind="project_note",
+        project="Alpha",
+        note="cross",
+        content="See [[Phantom]] which does not exist.",
+        index=index,
+    )
+
+    # Make any file-content read explode; the index-backed check must not
+    # touch the filesystem for bodies.
+    def _boom(*_a, **_k):
+        raise AssertionError("check_broken_wikilinks should not read files from disk")
+
+    monkeypatch.setattr(Path, "read_text", _boom)
+
+    issues = doctor_ops.check_broken_wikilinks(vault, index)
+    assert any(i.code == "broken-wikilinks" for i in issues)
+    assert "Phantom" in (next(i for i in issues if i.code == "broken-wikilinks").detail or "")
+
+
 # ---- Conflicted copies -------------------------------------------------
 
 

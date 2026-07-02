@@ -20,7 +20,7 @@ Checks performed:
   Never auto-resolved; the user picks the canonical version.
 * ``scheduled_task_stale``  — ``last_compact``/``last_review``
   timestamps older than expected slots, or never recorded — proxy for
-  "scheduled tasks aren't firing".
+  "lazy maintenance (or a Routine) isn't running".
 
 Resolution is always user-initiated. Doctor never deletes files,
 mutates frontmatter, or reorganizes the vault.
@@ -198,16 +198,16 @@ def check_index_drift(root: Path, index: Index) -> list[HealthIssue]:
     The most common cause is the user editing a markdown file directly
     in Obsidian without running ``pace reindex``. We don't auto-fix —
     the LLM may have stale snippets in context, so it's a real warning.
+
+    Drives off ``index.all_records()`` (one query) plus a cheap
+    ``stat`` per file; no file contents are read.
     """
     drift: list[str] = []
-    for rel in index.all_paths():
-        full = root / rel
+    for record in index.all_records():
+        full = root / record.path
         if not full.is_file():
             # Stale row; reindex will clean it up. Counted in a separate
             # check would be redundant — not flagged here.
-            continue
-        record = index.get_by_path(rel)
-        if record is None:
             continue
         try:
             mtime = datetime.fromtimestamp(full.stat().st_mtime)
@@ -215,7 +215,7 @@ def check_index_drift(root: Path, index: Index) -> list[HealthIssue]:
         except (TypeError, ValueError, OSError):
             continue
         if mtime > indexed + _DRIFT_TOLERANCE:
-            drift.append(rel)
+            drift.append(record.path)
     if not drift:
         return []
     return [
@@ -234,20 +234,20 @@ def check_broken_wikilinks(root: Path, index: Index) -> list[HealthIssue]:
 
     Surfaced through ``pace_status`` so the model raises them with the
     user. The model never auto-fixes wikilinks — it asks.
+
+    Reads bodies from the index (``all_records``) rather than re-reading
+    every file from disk — this runs on every ``pace_status`` call, so
+    the disk I/O mattered. A link added by hand in Obsidian but not yet
+    reindexed surfaces once ``check_index_drift`` prompts a reindex;
+    doctor reports on indexed state by design.
     """
-    paths_to_ids = index.all_paths_with_ids()
+    records = index.all_records()
+    paths_to_ids = {r.path: r.id for r in records}
     broken: list[str] = []
-    for rel in sorted(paths_to_ids):
-        full = root / rel
-        if not full.is_file():
-            continue
-        try:
-            _, body = frontmatter.parse(full.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            continue
-        for link in wikilinks.extract(body):
+    for record in records:
+        for link in wikilinks.extract(record.body):
             if wikilinks.resolve(link.target, paths_to_ids) is None:
-                broken.append(f"{rel} → [[{link.target}]]")
+                broken.append(f"{record.path} → [[{link.target}]]")
     if not broken:
         return []
     return [
@@ -308,37 +308,44 @@ def check_scheduled_task_freshness(
 ) -> list[HealthIssue]:
     """Flag stale ``last_compact``/``last_review`` timestamps.
 
-    Phase 6 can't talk to Cowork's task scheduler directly, but a stale
-    timestamp is the same observable as a missing/paused task. The
-    daily compact should run ≤ 36h ago; weekly review ≤ 9 days ago.
+    Under the v0.2.1 lazy-maintenance model these tasks run *in session*
+    (``pace_status`` returns ``needs_compact`` / ``needs_review`` and the
+    model runs them after its first reply), or via optional user-created
+    Routines. Either way a stale timestamp means maintenance hasn't been
+    happening — the model isn't running the lazy step, or the vault
+    hasn't been opened. The daily compact should run ≤ 36h ago; weekly
+    review ≤ 9 days ago.
 
     Day-1 vaults are exempt: if the vault is younger than the freshness
     window, the never-run warning is suppressed. Otherwise the model
-    would nag the user about scheduled tasks for the entire first day.
+    would nag the user for the entire first day.
     """
     now = now or datetime.now()
     vault_age = _vault_age(index, now=now)
 
     issues: list[HealthIssue] = []
-    for key, freshness, label in (
-        ("last_compact", _COMPACT_FRESHNESS, "Daily compaction"),
-        ("last_review", _REVIEW_FRESHNESS, "Weekly review"),
+    for key, freshness, label, manual_cmd in (
+        ("last_compact", _COMPACT_FRESHNESS, "Daily compaction",
+         "`pace compact --plan` then `pace compact --apply <plan>`"),
+        ("last_review", _REVIEW_FRESHNESS, "Weekly review",
+         "`pace review --plan` then `pace review --apply <plan>`"),
     ):
         raw = index.get_config(key)
         if raw is None:
             # Suppress on day-1 vaults: if the vault hasn't been around
-            # long enough for a scheduled run to have happened, "never
-            # ran" is expected, not a failure.
+            # long enough for a run to have happened, "never ran" is
+            # expected, not a failure.
             if vault_age is not None and vault_age <= freshness:
                 continue
             issues.append(
                 HealthIssue(
                     severity="warning",
                     code=f"{key.replace('_', '-')}-never",
-                    message=f"{label} has never run.",
+                    message=f"{label} hasn't run yet.",
                     fix_hint=(
-                        "Check Cowork's scheduled-task UI to confirm "
-                        "the task is registered and not paused."
+                        f"It normally runs automatically after your first "
+                        f"message each session. To run it now: {manual_cmd}. "
+                        f"If you set up a Routine for it, confirm it's active."
                     ),
                 )
             )
@@ -359,9 +366,9 @@ def check_scheduled_task_freshness(
                     ),
                     detail=f"last run: {raw}",
                     fix_hint=(
-                        "Open Cowork at least once during the scheduled "
-                        "window. If still stale next session, check the "
-                        "task in Cowork's scheduled-task UI."
+                        f"It runs automatically after your first message "
+                        f"each session; if it's still stale next session, "
+                        f"run it manually: {manual_cmd}."
                     ),
                 )
             )

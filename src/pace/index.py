@@ -268,6 +268,17 @@ class Index:
         rows = self._conn.execute("SELECT id, path FROM files").fetchall()
         return {row["path"]: row["id"] for row in rows}
 
+    def all_records(self) -> list[FileRecord]:
+        """Every indexed file as a :class:`FileRecord`, in one query.
+
+        Lets callers that need bodies for the whole vault (e.g. doctor's
+        broken-wikilink and drift checks) work off the index instead of
+        re-reading and re-parsing every markdown file from disk — the
+        hot-path cost that made ``pace_status`` scale poorly.
+        """
+        rows = self._conn.execute("SELECT * FROM files ORDER BY path").fetchall()
+        return [_row_to_record(row) for row in rows]
+
     def get_id(self, path: str) -> int | None:
         row = self._conn.execute("SELECT id FROM files WHERE path = ?", (path,)).fetchone()
         return row["id"] if row else None
