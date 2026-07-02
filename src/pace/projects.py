@@ -20,7 +20,7 @@ from pathlib import Path
 from pace import frontmatter, wikilinks
 from pace.index import Index, now_iso
 from pace.io import atomic_write_text
-from pace.paths import PROJECTS_DIR
+from pace.paths import PROJECTS_DIR, kind_from_path, project_from_path
 
 # Project directory names: alphanumerics, underscore, hyphen. Conservative on
 # purpose — we want filesystems and wikilinks to behave consistently.
@@ -351,10 +351,10 @@ def _reimport_file(root: Path, md: Path, *, index: Index) -> None:
     rel = md.relative_to(root).as_posix()
     fm, body = frontmatter.parse(md.read_text(encoding="utf-8"))
 
-    kind = _kind_from_path(rel)
+    kind = kind_from_path(rel)
     if kind is None:
         return
-    project = _project_from_path(rel)
+    project = project_from_path(rel)
 
     fid = index.upsert_file(
         path=rel,
@@ -371,14 +371,12 @@ def _reimport_file(root: Path, md: Path, *, index: Index) -> None:
     # Refresh wikilink refs originating at this file.
     index.clear_wikilink_refs_from(fid)
     paths_to_ids = index.all_paths_with_ids()
+    targets: list[int] = []
     for link in wikilinks.extract(body):
         target_id = wikilinks.resolve(link.target, paths_to_ids)
         if target_id is not None and target_id != fid:
-            index.record_ref(
-                source_id=fid,
-                target_id=target_id,
-                ref_type="wikilink",
-            )
+            targets.append(target_id)
+    index.record_wikilink_refs(fid, targets)
 
 
 def _walk_vault_markdown(root: Path):
@@ -389,29 +387,6 @@ def _walk_vault_markdown(root: Path):
         for path in base.rglob("*.md"):
             if path.is_file():
                 yield path
-
-
-def _kind_from_path(rel: str) -> str | None:
-    parts = rel.split("/")
-    if rel == "memories/working_memory.md":
-        return "working"
-    if parts[:2] == ["memories", "long_term"]:
-        return "long_term"
-    if parts[:2] == ["memories", "archived"]:
-        return "archived"
-    if len(parts) >= 3 and parts[0] == PROJECTS_DIR:
-        if parts[-1] == "summary.md" and len(parts) == 3:
-            return "project_summary"
-        if "notes" in parts:
-            return "project_note"
-    return None
-
-
-def _project_from_path(rel: str) -> str | None:
-    parts = rel.split("/")
-    if len(parts) >= 3 and parts[0] == PROJECTS_DIR:
-        return parts[1]
-    return None
 
 
 def _normalize_aliases(aliases: list[str]) -> list[str]:

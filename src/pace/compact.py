@@ -56,6 +56,17 @@ _FORCE_PROMOTION_EXEMPT_TAGS: frozenset[str] = frozenset(
 def _is_force_promotion_exempt(entry: Entry) -> bool:
     return any(tag in _FORCE_PROMOTION_EXEMPT_TAGS for tag in entry.tags)
 
+
+def _joined_len(entries: list[Entry]) -> int:
+    """Length of ``entries.join(...)`` without building the string.
+
+    Mirrors :func:`pace.entries.join`: each entry contributes its raw
+    form plus one ``"\\n"`` separator between adjacent entries.
+    """
+    if not entries:
+        return 0
+    return sum(len(e.raw) for e in entries) + (len(entries) - 1)
+
 # Tag-driven topic suggestions. When the LLM doesn't override, these are
 # safe defaults that group related facts in the same long_term file.
 _TAG_TO_TOPIC: dict[str, str] = {
@@ -304,7 +315,12 @@ def apply_compaction(
         overflow_target_rel = f"{LONG_TERM_DIR}/{_OVERFLOW_TOPIC}.md"
         overflow_target_path = root / overflow_target_rel
 
-        while entries and len(join(entries)) > settings.working_memory_soft_chars:
+        # Track the joined length incrementally instead of re-serializing
+        # every entry on each iteration (was O(n²)). join() inserts one
+        # "\n" separator between entries, so its length is the sum of the
+        # entries' raw forms plus (count - 1).
+        current_len = _joined_len(entries)
+        while entries and current_len > settings.working_memory_soft_chars:
             # Force-promote the oldest *non-exempt* entry. Identity
             # bookends and decision records are exempt — losing those
             # to overflow would cost what PACE was built to preserve
@@ -323,11 +339,15 @@ def apply_compaction(
                     "(#user / #high-signal / #decision)."
                 )
                 break
+            count_before = len(entries)
             oldest = entries.pop(promotable_idx)
             _append_to_long_term(
                 overflow_target_path, oldest, topic=_OVERFLOW_TOPIC
             )
             overflow_promoted += 1
+            # Removing one entry drops its raw length plus one separator
+            # (unless it was the last remaining entry).
+            current_len -= len(oldest.raw) + (1 if count_before >= 2 else 0)
             log_lines.append(
                 f"- overflow → {overflow_target_rel}: {oldest.heading!r}"
             )

@@ -204,15 +204,13 @@ def _refresh_wikilink_refs(file_id: int, body: str, index: Index) -> None:
     """Re-record outbound wikilink refs for ``file_id`` based on ``body``."""
     index.clear_wikilink_refs_from(file_id)
     paths_to_ids = index.all_paths_with_ids()
+    targets: list[int] = []
     for link in wikilinks.extract(body):
         target_id = wikilinks.resolve(link.target, paths_to_ids)
         if target_id is None or target_id == file_id:
             continue
-        index.record_ref(
-            source_id=file_id,
-            target_id=target_id,
-            ref_type="wikilink",
-        )
+        targets.append(target_id)
+    index.record_wikilink_refs(file_id, targets)
 
 
 # ---- Tag and slug normalization ---------------------------------------
