@@ -233,6 +233,57 @@ def test_init_is_idempotent(mcp_vault: Path) -> None:
     assert second["created_files"] == []
 
 
+# ---- Init hardening: explicit-root guard (#6) --------------------------
+
+
+def test_init_explicit_root_empty_dir_ok(tmp_path: Path) -> None:
+    """A user-named fresh folder (the Cowork onboarding shape) works."""
+    target = tmp_path / "new-vault"
+    target.mkdir()
+    result = pace_init(root=str(target))
+    assert "error" not in result
+    assert (target / "system" / "pace_index.db").is_file()
+
+
+def test_init_explicit_root_nonexistent_dir_ok(tmp_path: Path) -> None:
+    target = tmp_path / "does-not-exist-yet"
+    result = pace_init(root=str(target))
+    assert "error" not in result
+    assert (target / "system" / "pace_index.db").is_file()
+
+
+def test_init_explicit_root_refuses_populated_non_vault_dir(tmp_path: Path) -> None:
+    """Injection guard: don't scaffold PACE + git into a dir full of the
+    user's unrelated files."""
+    target = tmp_path / "my-documents"
+    target.mkdir()
+    (target / "taxes.xlsx").write_text("secret", encoding="utf-8")
+
+    result = pace_init(root=str(target))
+    assert "error" in result
+    assert result["initialized"] is False
+    # Nothing scaffolded; the user's dir is untouched.
+    assert not (target / "system").exists()
+    assert not (target / ".mcp.json").exists()
+    assert (target / "taxes.xlsx").read_text(encoding="utf-8") == "secret"
+
+
+def test_init_explicit_root_reinit_existing_vault_ok(tmp_path: Path) -> None:
+    """Re-running init against an existing vault (idempotent) is allowed
+    even though it's non-empty — it's already a PACE vault."""
+    target = tmp_path / "vault"
+    vault_ops.init(target)
+    result = pace_init(root=str(target))
+    assert "error" not in result
+    assert result["already_initialized"] is True
+
+
+def test_init_explicit_root_rejects_dotdot(tmp_path: Path) -> None:
+    result = pace_init(root="../escape")
+    assert "error" in result
+    assert result["initialized"] is False
+
+
 # ---- Working-memory hard-cap truncation in pace_status ---------------
 
 
