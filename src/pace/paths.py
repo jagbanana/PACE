@@ -123,3 +123,33 @@ def require_vault_root(start: Path | None = None) -> Path:
 def is_initialized(root: Path) -> bool:
     """Return True if ``root`` looks like an initialized vault."""
     return (root / INDEX_DB).is_file()
+
+
+def kind_from_path(rel: str) -> str | None:
+    """Classify a vault-relative posix path into a ``files.kind``.
+
+    Returns ``None`` for paths outside the indexed set (e.g. system
+    files). Shared by :mod:`pace.vault` (reindex) and :mod:`pace.projects`
+    (rename re-import) so the two can't drift.
+    """
+    parts = rel.split("/")
+    if rel == WORKING_MEMORY:
+        return "working"
+    if parts[:2] == ["memories", "long_term"]:
+        return "long_term"
+    if parts[:2] == ["memories", "archived"]:
+        return "archived"
+    if len(parts) >= 3 and parts[0] == PROJECTS_DIR:
+        if parts[-1] == "summary.md" and len(parts) == 3:
+            return "project_summary"
+        if "notes" in parts:
+            return "project_note"
+    return None
+
+
+def project_from_path(rel: str) -> str | None:
+    """Return the project name for a ``projects/<name>/...`` path, else None."""
+    parts = rel.split("/")
+    if len(parts) >= 3 and parts[0] == PROJECTS_DIR:
+        return parts[1]
+    return None

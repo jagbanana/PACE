@@ -12,10 +12,10 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 # Allowed values for the ``files.kind`` column.
@@ -339,6 +339,31 @@ class Index:
                 (source_id, target_id, ref_type, occurred_at or now_iso()),
             )
 
+    def record_wikilink_refs(
+        self,
+        source_id: int,
+        target_ids: Iterable[int],
+        *,
+        occurred_at: str | None = None,
+    ) -> None:
+        """Insert wikilink refs from ``source_id`` to each target in one
+        transaction.
+
+        Reindex and per-file refreshes previously inserted each link in
+        its own transaction; batching them cuts the fsync/commit overhead
+        that added up across a full reindex. No-op on an empty target set.
+        """
+        ts = occurred_at or now_iso()
+        rows = [(source_id, tid, "wikilink", ts) for tid in target_ids]
+        if not rows:
+            return
+        with self._conn:
+            self._conn.executemany(
+                "INSERT INTO refs(source_id, target_id, ref_type, occurred_at) "
+                "VALUES (?, ?, ?, ?)",
+                rows,
+            )
+
     def clear_wikilink_refs_from(self, source_id: int) -> int:
         """Drop all wikilink rows originating at ``source_id``. Returns count."""
         with self._conn:
@@ -349,11 +374,19 @@ class Index:
             return cur.rowcount
 
     def reference_count(self, target_id: int, *, since_days: int = 60) -> int:
-        """Count refs to ``target_id`` within the last ``since_days``."""
+        """Count refs to ``target_id`` within the last ``since_days``.
+
+        The cutoff is computed with the same local clock that writes
+        ``occurred_at`` (via :func:`now_iso`), not SQLite's UTC
+        ``date('now')``. Mixing the two shifted the window by up to a day
+        for users far from UTC; comparing two local ISO-8601 strings is
+        exact.
+        """
+        cutoff = (datetime.now() - timedelta(days=since_days)).isoformat()
         row = self._conn.execute(
             "SELECT COUNT(*) AS n FROM refs "
-            "WHERE target_id = ? AND occurred_at > date('now', ?)",
-            (target_id, f"-{since_days} days"),
+            "WHERE target_id = ? AND occurred_at > ?",
+            (target_id, cutoff),
         ).fetchone()
         return int(row["n"]) if row else 0
 
@@ -427,13 +460,9 @@ class Index:
         a non-empty list as failure.
         """
         rows = self._conn.execute("PRAGMA integrity_check").fetchall()
-        issues: list[str] = []
-        for row in rows:
-            # SQLite returns a single column; tuple-style access is portable.
-            value = row[0] if not hasattr(row, "keys") else row[list(row.keys())[0]]
-            if value != "ok":
-                issues.append(value)
-        return issues
+        # row_factory is sqlite3.Row, which supports positional indexing;
+        # integrity_check returns a single column per row.
+        return [row[0] for row in rows if row[0] != "ok"]
 
     # ---- Config --------------------------------------------------------
 

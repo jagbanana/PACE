@@ -50,7 +50,23 @@ from pace.paths import (
 )
 
 
+class _PaceGroup(click.Group):
+    """Top-level group that renders a missing vault as a friendly error.
+
+    ``require_vault_root`` raises :class:`VaultNotFoundError` deep in a
+    subcommand; catching it here turns it into a clean Click message
+    instead of a traceback, for every subcommand at once.
+    """
+
+    def invoke(self, ctx: click.Context):
+        try:
+            return super().invoke(ctx)
+        except VaultNotFoundError as exc:
+            raise click.ClickException(str(exc)) from exc
+
+
 @click.group(
+    cls=_PaceGroup,
     context_settings={"help_option_names": ["-h", "--help"]},
     help="PACE — Persistent AI Context Engine. Run `pace <command> --help` for details.",
 )
@@ -876,22 +892,6 @@ def _resolve_plan_out_path(root: Path, out: Path | None, *, kind: str) -> Path:
         return out
     stamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
     return root / "system" / "logs" / f"{kind}-plan-{stamp}.json"
-
-
-# Convert VaultNotFoundError into a friendly Click message globally.
-def _wrap_vault_errors() -> None:
-    original = main.invoke
-
-    def invoke(ctx: click.Context):
-        try:
-            return original(ctx)
-        except VaultNotFoundError as exc:
-            raise click.ClickException(str(exc)) from exc
-
-    main.invoke = invoke  # type: ignore[method-assign]
-
-
-_wrap_vault_errors()
 
 
 if __name__ == "__main__":

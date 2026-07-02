@@ -40,6 +40,8 @@ from pace.paths import (
     SYSTEM_DIR,
     WORKING_MEMORY,
     is_initialized,
+    kind_from_path,
+    project_from_path,
 )
 
 # Where the scheduled-task prompts live in a vault. Kept in sync with the
@@ -495,7 +497,7 @@ def reindex(root: Path, index: Index) -> ReindexResult:
 
     for md in _walk_markdown(root):
         rel = md.relative_to(root).as_posix()
-        kind = _kind_from_path(rel)
+        kind = kind_from_path(rel)
         if kind is None:
             skipped += 1
             continue
@@ -508,7 +510,7 @@ def reindex(root: Path, index: Index) -> ReindexResult:
         date_modified = str(fm.get("date_modified") or now_iso())
         tags = list(fm.get("tags") or [])
         aliases = list(fm.get("aliases") or [])
-        project = _project_from_path(rel)
+        project = project_from_path(rel)
 
         fid = index.upsert_file(
             path=rel,
@@ -530,15 +532,13 @@ def reindex(root: Path, index: Index) -> ReindexResult:
     paths_to_ids = index.all_paths_with_ids()
     for fid, body in bodies.items():
         index.clear_wikilink_refs_from(fid)
+        targets: list[int] = []
         for link in wikilinks.extract(body):
             target_id = wikilinks.resolve(link.target, paths_to_ids)
             if target_id is None or target_id == fid:
                 continue
-            index.record_ref(
-                source_id=fid,
-                target_id=target_id,
-                ref_type="wikilink",
-            )
+            targets.append(target_id)
+        index.record_wikilink_refs(fid, targets)
 
     # Remove rows whose files were deleted on disk.
     removed = 0
@@ -566,29 +566,6 @@ def _walk_markdown(root: Path):
         for path in base.rglob("*.md"):
             if path.is_file():
                 yield path
-
-
-def _kind_from_path(rel: str) -> str | None:
-    parts = rel.split("/")
-    if rel == WORKING_MEMORY:
-        return "working"
-    if parts[:2] == ["memories", "long_term"]:
-        return "long_term"
-    if parts[:2] == ["memories", "archived"]:
-        return "archived"
-    if len(parts) >= 3 and parts[0] == "projects":
-        if parts[-1] == "summary.md" and len(parts) == 3:
-            return "project_summary"
-        if "notes" in parts:
-            return "project_note"
-    return None
-
-
-def _project_from_path(rel: str) -> str | None:
-    parts = rel.split("/")
-    if len(parts) >= 3 and parts[0] == "projects":
-        return parts[1]
-    return None
 
 
 def _default_title_for(rel: str) -> str:
