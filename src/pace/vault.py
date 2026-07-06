@@ -12,6 +12,7 @@ on top so a fresh ``pace init`` produces a fully-bootstrapped vault.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -32,6 +33,7 @@ from pace.paths import (
     ARCHIVED_DIR,
     FOLLOWUPS_DIR,
     FOLLOWUPS_DONE_DIR,
+    IGNORED_DIRS,
     INDEX_DB,
     LOGS_DIR,
     LONG_TERM_DIR,
@@ -557,15 +559,22 @@ def _walk_markdown(root: Path):
     """Yield every ``*.md`` file under ``memories/`` and ``projects/``.
 
     The system directory is excluded — anything in there is operational
-    state, not memory content.
+    state, not memory content. Directories in ``IGNORED_DIRS`` (e.g. a
+    project's ``node_modules``) are pruned during the walk so we never
+    descend into large generated or third-party trees.
     """
     for sub in (MEMORIES_DIR, PROJECTS_DIR):
         base = root / sub
         if not base.is_dir():
             continue
-        for path in base.rglob("*.md"):
-            if path.is_file():
-                yield path
+        for dirpath, dirnames, filenames in os.walk(base):
+            # Prune ignored directories in place so os.walk skips them.
+            dirnames[:] = [d for d in dirnames if d not in IGNORED_DIRS]
+            for name in filenames:
+                if name.endswith(".md"):
+                    path = Path(dirpath) / name
+                    if path.is_file():
+                        yield path
 
 
 def _default_title_for(rel: str) -> str:

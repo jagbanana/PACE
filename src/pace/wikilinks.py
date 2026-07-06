@@ -29,6 +29,14 @@ from pathlib import Path
 # don't merge. Targets cannot contain ``[``, ``]``, ``|``, ``#``.
 _WIKILINK_RE = re.compile(r"\[\[([^\]\[\|#]+)((?:#[^\]\[\|]+)?)(\|[^\]\[]+)?\]\]")
 
+# Code regions whose contents are literal text, not links. A ``[[x]]`` inside
+# a fenced block or an inline code span is a syntax *example* (documentation,
+# a README, a pasted snippet), so extraction skips it — otherwise every doc
+# that shows the wikilink syntax would report false broken links and inflate
+# reference counts.
+_FENCE_RE = re.compile(r"(?ms)^[ \t]*(`{3,}|~{3,})[^\n]*\n.*?^[ \t]*\1[ \t]*$")
+_INLINE_CODE_RE = re.compile(r"(`+)(?:.+?)\1")
+
 
 @dataclass(frozen=True)
 class WikilinkMatch:
@@ -44,11 +52,18 @@ class WikilinkMatch:
 
 
 def extract(body: str) -> list[WikilinkMatch]:
-    """Return all wikilinks in ``body`` in source order."""
+    """Return all wikilinks in ``body`` in source order.
+
+    Wikilinks inside code (fenced blocks or inline spans) are skipped —
+    they are syntax examples, not navigational links.
+    """
+    code_spans = _code_spans(body)
     out: list[WikilinkMatch] = []
     for m in _WIKILINK_RE.finditer(body):
         target = m.group(1).strip()
         if not target:
+            continue
+        if _inside_any(m.start(), code_spans):
             continue
         out.append(
             WikilinkMatch(
@@ -112,6 +127,25 @@ def rewrite(body: str, mapping: dict[str, str]) -> tuple[str, int]:
 
 
 # ---- Internals --------------------------------------------------------
+
+
+def _code_spans(body: str) -> list[tuple[int, int]]:
+    """Return (start, end) offsets of fenced blocks and inline code spans.
+
+    Fences are matched first; inline spans may also match inside them, but
+    overlapping regions are harmless since callers only test membership.
+    """
+    spans: list[tuple[int, int]] = []
+    for m in _FENCE_RE.finditer(body):
+        spans.append(m.span())
+    for m in _INLINE_CODE_RE.finditer(body):
+        spans.append(m.span())
+    return spans
+
+
+def _inside_any(pos: int, spans: list[tuple[int, int]]) -> bool:
+    """True if ``pos`` falls within any (start, end) span."""
+    return any(start <= pos < end for start, end in spans)
 
 
 def _candidate_paths(target: str) -> list[str]:

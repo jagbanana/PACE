@@ -24,6 +24,28 @@ def test_extract_keeps_multiple_links_on_one_line_distinct() -> None:
     assert [m.target for m in matches] == ["A", "B", "C"]
 
 
+def test_extract_skips_inline_code_examples() -> None:
+    body = "Real link [[Alpha]] but the `[[Wikilinks]]` syntax is an example."
+    assert [m.target for m in wikilinks.extract(body)] == ["Alpha"]
+
+
+def test_extract_skips_fenced_code_examples() -> None:
+    body = (
+        "See [[Alpha]].\n\n"
+        "```\n"
+        "Cross-reference with [[Target]] and [[Wikilinks]].\n"
+        "```\n\n"
+        "And [[Beta]].\n"
+    )
+    assert [m.target for m in wikilinks.extract(body)] == ["Alpha", "Beta"]
+
+
+def test_extract_keeps_links_next_to_code_spans() -> None:
+    # A lone backtick in prose must not swallow a following real link.
+    body = "Run `pace status`, then read [[Alpha]] and [[Beta]]."
+    assert [m.target for m in wikilinks.extract(body)] == ["Alpha", "Beta"]
+
+
 def test_resolve_exact_path_match() -> None:
     paths = {"memories/long_term/people.md": 1, "memories/working_memory.md": 2}
     assert wikilinks.resolve("memories/long_term/people.md", paths) == 1
