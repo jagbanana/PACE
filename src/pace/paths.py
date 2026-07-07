@@ -53,6 +53,26 @@ PROJECTS_DIR = "projects"
 FOLLOWUPS_DIR = "followups"
 FOLLOWUPS_DONE_DIR = "followups/done"
 
+# Directory names never indexed, even under projects/. These hold generated
+# or third-party files (a project may legitimately contain a code checkout),
+# not memory content. Skipping them keeps the index clean and fast and avoids
+# false broken-wikilinks from code that happens to contain ``[[...]]`` syntax.
+IGNORED_DIRS: frozenset[str] = frozenset(
+    {
+        "node_modules",
+        ".git",
+        ".obsidian",
+        ".venv",
+        "venv",
+        "__pycache__",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".ipynb_checkpoints",
+        "dist",
+        "build",
+    }
+)
+
 
 def find_vault_root(
     start: Path | None = None, *, use_user_config: bool = True
@@ -133,6 +153,8 @@ def kind_from_path(rel: str) -> str | None:
     (rename re-import) so the two can't drift.
     """
     parts = rel.split("/")
+    if any(part in IGNORED_DIRS for part in parts):
+        return None
     if rel == WORKING_MEMORY:
         return "working"
     if parts[:2] == ["memories", "long_term"]:
@@ -142,8 +164,11 @@ def kind_from_path(rel: str) -> str | None:
     if len(parts) >= 3 and parts[0] == PROJECTS_DIR:
         if parts[-1] == "summary.md" and len(parts) == 3:
             return "project_summary"
-        if "notes" in parts:
-            return "project_note"
+        # Any other markdown inside a project folder is project content:
+        # notes/, plus hand-made Obsidian files (cards/, playbook/, loose
+        # docs). Index it so its body is searchable and inbound wikilinks
+        # resolve. Only summary.md is special-cased above.
+        return "project_note"
     return None
 
 

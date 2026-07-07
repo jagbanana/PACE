@@ -36,9 +36,18 @@ def test_kind_from_path() -> None:
     assert paths.kind_from_path("projects/Alpha/summary.md") == "project_summary"
     assert paths.kind_from_path("projects/Alpha/notes/kickoff.md") == "project_note"
     assert paths.kind_from_path("projects/Alpha/notes/deep/n.md") == "project_note"
+    # Any non-summary markdown inside a project counts as project content,
+    # including hand-made Obsidian files outside notes/.
+    assert paths.kind_from_path("projects/Alpha/cards/2026-01-01-x.md") == "project_note"
+    assert paths.kind_from_path("projects/Alpha/playbook/do-not-engage.md") == "project_note"
+    assert paths.kind_from_path("projects/Alpha/kanban.md") == "project_note"
     # Not part of the indexed set.
     assert paths.kind_from_path("system/logs/run.log") is None
     assert paths.kind_from_path("projects/Alpha") is None
+    # Ignored directories are never indexed, even under a project.
+    assert paths.kind_from_path("projects/Video/node_modules/x/README.md") is None
+    assert paths.kind_from_path("projects/Alpha/dist/build.md") is None
+    assert paths.kind_from_path("projects/Alpha/.git/notes.md") is None
 
 
 def test_project_from_path() -> None:
