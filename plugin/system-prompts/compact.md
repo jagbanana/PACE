@@ -74,8 +74,12 @@ For each in-scope file, do the following in order:
 
 ### 3. Wrap up
 
-1. Run `pace status` and append the counts to `system/logs/`.
-2. In the same log line, also append: number of wikilinks added,
+1. If the hygiene pass edited any files directly, run `pace reindex`
+   so the search index matches what's on disk — direct file edits
+   bypass the index-updating write path and would otherwise surface
+   as index-drift warnings on the next `pace_status`.
+2. Run `pace status` and append the counts to `system/logs/`.
+3. In the same log line, also append: number of wikilinks added,
    number of stubs created, number of unresolved-link fixes, and
    number of orphans flagged. This gives the weekly review a delta to
    work from.

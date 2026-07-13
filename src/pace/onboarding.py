@@ -220,6 +220,24 @@ promotes stable items). Use `long_term` (with `topic`) when the fact is
 clearly stable and topical. Inside an active project, use
 `project_summary` or `project_note` (the latter requires `note`).
 
+Also capture **work-episode digests**: when a substantial piece of
+work wraps up — a decision made, a draft finished, a plan agreed —
+save a one-to-three sentence summary of what was done and why
+(`kind=working`). Digests are what let you say "last Tuesday we
+drafted the pricing doc" next session, and they preserve the session's
+substance if it ends abruptly. Capture them at natural pause points,
+not only at the end of a session.
+
+## Recall (before answering about the past)
+
+Working memory arrives free with `pace_status`, but long-term memory
+only helps if you read it. When the user references a person, decision,
+or prior discussion that isn't in working memory — "what did we decide
+about X", "that vendor from last month" — call `pace_search` with
+their phrase before answering, and ground your reply in what it
+returns. If search comes up empty, say you don't have it rather than
+guessing; never bluff a memory. Don't announce the lookup.
+
 ## Followups — proactive items to resurface
 
 When the user states a commitment or asks you to remember to do
@@ -432,8 +450,12 @@ For each in-scope file, do the following in order:
 
 ### 3. Wrap up
 
-1. Run `pace status` and append the counts to `system/logs/`.
-2. In the same log line, also append: number of wikilinks added,
+1. If the hygiene pass edited any files directly, run `pace reindex`
+   so the search index matches what's on disk — direct file edits
+   bypass the index-updating write path and would otherwise surface
+   as index-drift warnings on the next `pace_status`.
+2. Run `pace status` and append the counts to `system/logs/`.
+3. In the same log line, also append: number of wikilinks added,
    number of stubs created, number of unresolved-link fixes, and
    number of orphans flagged. This gives the weekly review a delta to
    work from.
