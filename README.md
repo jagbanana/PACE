@@ -39,7 +39,7 @@ It lets you stand up **individual, named coworkers**, each with its own personal
 
 <em>A PACE agent's vault after a few weeks, viewed in Obsidian's graph mode. The wikilink network is maintained silently as you talk.</em>
 
-PACE agents act like experts! They don't just respond. They proactively setup systems and structures to deliver effectively on your goals.
+PACE agents act like experts! They don't just respond. They proactively set up systems and structures to deliver effectively on your goals.
 
 The model behind it is the human one: each PACE coworker handles 3–4 projects for you, just like a real employee, and you bring them up the curve over time. Each has a name, an emoji, and a voice; each remembers the last conversation, the last decision, and why you made it. You can stand up several at once, one per folder, each with its own scope (e.g. `~/agents/Misa` for marketing work, `~/agents/Bob` for research), and they stay completely separate.
 
@@ -51,7 +51,7 @@ It's built for **knowledge work**: research, marketing, planning, strategy, anyt
 
 Examples include:
 
-1. **Support and ticket resolution:** link your PACE agent to KB and system tools via MCP. It improve on its ability to resolve issues, learn how to escalate issues, and enhance your KB over time.
+1. **Support and ticket resolution:** link your PACE agent to KB and system tools via MCP. It improves at resolving issues, learns when to escalate, and enhances your KB over time.
 2. **Marketing and research:** provide your PACE agent style guides, target audience information, and website & analytics access. It can build and execute on content plans, manage SEO, and more. Based on real-world feedback, it can learn, adjust, and apply continuous improvement.
 3. **Project management:** enable Obsidian plugins to visually manage workflows. Your PACE agent learns stakeholders, common dependencies, and structural risks. It can anticipate problems and proactively gather status from team members via connected channels.
 
@@ -59,13 +59,14 @@ Examples include:
 
    <em>An Obsidian Kanban scaffolded and kept current by the agent. PACE agents proactively build visible structures so you can read the work at a glance.</em>
 
-4. **Ends with your imagination:** just like OpenClaw, PACE use cases are wide open and limited to your imagination. Not sure how to best use PACE? Setup a PACE agent specifically to brainstorm ideas. Discuss what you aren't good at, where you need help, and what you don't like doing. Let agents help you work more effectively and efficienctly!
+4. **Ends with your imagination:** just like OpenClaw, PACE use cases are wide open and limited only by your imagination. Not sure how to best use PACE? Set up a PACE agent specifically to brainstorm ideas. Discuss what you aren't good at, where you need help, and what you don't like doing. Let agents help you work more effectively and efficiently!
 
-It is recommended to make one PACE agent per role (or per major use case), though each agent can handle multple projects.
+It is recommended to make one PACE agent per role (or per major use case), though each agent can handle multiple projects.
 
 Behind the scenes:
 
-- When you state a fact, decision, preference, or person worth remembering, the coworker captures it silently.
+- When you state a fact, decision, preference, or person worth remembering, the coworker captures it silently. When a substantial piece of work wraps up, it also captures a short digest of what was done and why, so future sessions remember the episode, not just the facts.
+- When you reference a past person, decision, or discussion that isn't in working memory, the coworker searches long-term memory before answering — and says it doesn't have something rather than guessing.
 - When you mention a project by name, alias, or even a topical phrase like *"the Q3 launch"*, the coworker pulls that project's summary into context before answering.
 - Compaction and weekly review run **silently at session start** when they're due: no scheduled tasks, no cron, no manual setup. Claude handles them in the background while you start your day.
 - An optional **proactive heartbeat** quietly checks during your work hours for things worth flagging, such as dated follow-ups coming due, stale commitments, repeated patterns. PACE agents then surface them at the top of your *next* session. Never interrupts; defaults to silence.
@@ -88,9 +89,9 @@ Behind the scenes:
 
 ### Status
 
-v0.3.6, beta. Targets **Claude Code** as the primary client. Multiple PACE agents per machine (one per folder) supported as of 0.3.0; first-vault setup is a single CLI command (`pace bootstrap <path>`) as of 0.3.6. The conversational "Onboard me to PACE" path is still wired up but recommended only as a fallback. Cowork support exists but has known technical challenges getting Cowork to recognize the MCP tools (see [Cowork status](#cowork-status) below).
+v0.3.8, beta. Targets **Claude Code** as the primary client. Multiple PACE agents per machine (one per folder) supported as of 0.3.0; first-vault setup is a single CLI command (`pace bootstrap <path>`) as of 0.3.6. The conversational "Onboard me to PACE" path is still wired up but recommended only as a fallback. Cowork support exists but has known technical challenges getting Cowork to recognize the MCP tools (see [Cowork status](#cowork-status) below).
 
-230+ tests cover capture, search, compaction, review, the proactive heartbeat, multi-vault resolution, and the MCP surface. Used daily by the maintainer. Mac dogfood pending; Windows + OneDrive is the primary target.
+290+ tests cover capture, search, compaction, review, the proactive heartbeat, multi-vault resolution, and the MCP surface. Used daily by the maintainer. Mac dogfood pending; Windows + OneDrive is the primary target.
 
 ---
 
@@ -140,8 +141,7 @@ Everything PACE knows about you lives in a folder you can open in Obsidian, VS C
 ```
 your-vault/
 ├── memories/
-│   ├── working/
-│   │   └── 2026-04-29.md          ← today's landing zone for new captures
+│   ├── working_memory.md          ← the landing zone for new captures
 │   ├── long_term/
 │   │   ├── user.md                ← who you are, your preferences
 │   │   ├── business.md            ← context about your work
@@ -230,7 +230,7 @@ So PACE separates memory into tiers, only loads the smallest one at session star
 
 | Tier | Loaded when? | What lives here | How it gets here |
 |---|---|---|---|
-| **Working** (`memories/working/`) | **Always**, via `pace_status` at session start | Today's captures, ephemeral notes, anything not yet promoted | Every `pace_capture` defaults here |
+| **Working** (`memories/working_memory.md`) | **Always**, via `pace_status` at session start | Recent captures, ephemeral notes, anything not yet promoted | Every `pace_capture` defaults here |
 | **Long-term** (`memories/long_term/`) | On demand, via `pace_search` | Stable facts about people, identifiers, decisions, preferences, business context | Daily compaction promotes from working; identity-pin captures land here directly |
 | **Project** (`projects/<name>/`) | On demand, via `pace_load_project` | A project's `summary.md` plus topical notes; loaded as a unit when the user mentions the project | Created by `pace_create_project`; populated by captures with `kind=project_summary` or `project_note` |
 | **Followups** (`followups/`) | **Ready items always**, via `pace_status.inbox` at session start | Proactive things to resurface: dated reminders, stale commitments, recurring patterns the heartbeat noticed | `pace_add_followup` (manual), or the heartbeat scanner (auto). Resolved items move to `followups/done/` |
@@ -240,7 +240,7 @@ So PACE separates memory into tiers, only loads the smallest one at session star
 
 The model is instructed to capture **only durable context** worth having next session:
 
-✅ **Capture**: names, roles, identifiers (account numbers, ticker symbols, slugs), key dates, decisions ("we picked option B because…"), validated approaches, corrections to earlier mistakes, business facts, anything tagged `#high-signal` or `#decision`.
+✅ **Capture**: names, roles, identifiers (account numbers, ticker symbols, slugs), key dates, decisions ("we picked option B because…"), validated approaches, corrections to earlier mistakes, business facts, anything tagged `#high-signal` or `#decision`. Plus short **work-episode digests** when a piece of work concludes, so a session that ends abruptly loses minutes of context, not hours.
 
 ❌ **Skip**: debugging chatter, filler, code already in git, generic how-to answers, anything cross-folder that belongs in the client's own auto-memory rather than this PACE root.
 
@@ -261,7 +261,7 @@ The standard tag set is small: `#person`, `#identifier`, `#date`, `#user`, `#bus
    ┌─────────────────────────────────────────────────┐
    │ pace.capture                                    │
    │   1. Append to the right Markdown file          │
-   │      - working: memories/working/<date>.md      │
+   │      - working: memories/working_memory.md      │
    │      - long_term: memories/long_term/<topic>.md │
    │      - project_*: projects/<name>/...           │
    │   2. Atomic write (survives OneDrive sync)      │
@@ -295,7 +295,7 @@ Claude reads these at session start and runs whatever's flagged **silently in th
                          ▼
    ┌────────────────────────────────────────────────────────┐
    │ Next turn (silently):                                  │
-   │   1. pace compact --plan  → JSON of promotion candids  │
+   │   1. pace compact --plan  → JSON plan of candidates    │
    │   2. Claude approves / skips per system/prompts/       │
    │      compact.md                                        │
    │   3. pace compact --apply <plan>                       │
@@ -303,10 +303,11 @@ Claude reads these at session start and runs whatever's flagged **silently in th
    └────────────────────────────────────────────────────────┘
 ```
 
-**Promotion rules** are conservative: an entry is promoted to long-term when:
+**Promotion rules** are conservative. An entry becomes a promotion *candidate* (Claude approves or skips each one) when:
 
-- it's at least N days old (configurable; default 1) **and** has been referenced from another file, **OR**
-- it carries a long-term tag (`#person`, `#identifier`, `#decision`, `#high-signal`), **OR**
+- it's at least 7 days old, **OR**
+- it carries a long-term tag (`#person`, `#identifier`, `#decision`, `#business`), **OR**
+- it contains identifier-shaped content (emails, ISO dates, codenames), **OR**
 - it would otherwise overflow the working-memory budget (force-promotion fallback).
 
 Force-promotion has one exception: entries tagged `#user`, `#high-signal`, or `#decision` are **never** force-evicted. This is what lets PACE keep a pinned identity entry (your name, the assistant's nickname and emoji) at the top of working memory forever.
@@ -350,10 +351,10 @@ This means **the model's session-start payload is bounded** even if you haven't 
 
 When `needs_review` is set (7d+ since last run), Claude runs the weekly review with the same lazy plan/apply ritual as compaction. It looks at every long-term entry and asks two questions:
 
-1. **Is it old?** Older than 90 days (configurable).
-2. **Is it cold?** No references in the last N days, no recent edits.
+1. **Is it old?** Older than 90 days.
+2. **Is it cold?** No references in the last 60 days.
 
-If both are yes **and** the entry doesn't carry a retention-exempt tag (`#user`, `#high-signal`, `#decision`), the review proposes moving it to `memories/archived/`. The maintainer (Claude, in this case) reviews the proposal before applying. Nothing is ever deleted; archived files remain searchable.
+If both are yes **and** the entry doesn't carry a retention-exempt tag (`#user`, `#high-signal`, `#decision`), the review proposes moving it to `memories/archived/`. Claude reviews the proposal before applying it. Nothing is ever deleted; archived files remain searchable.
 
 Review also writes a short synthesis note for the week: themes that emerged across captures, decisions made, anything worth surfacing.
 
@@ -606,7 +607,7 @@ ruff check            # lint
 ruff format           # auto-format
 ```
 
-There are 220+ tests covering capture, search, compaction, review, the proactive heartbeat, the followups data model, doctor, the MCP surface, plugin packaging, and onboarding artifacts.
+There are 290+ tests covering capture, search, compaction, review, the proactive heartbeat, the followups data model, doctor, the MCP surface, plugin packaging, and onboarding artifacts.
 
 ---
 
