@@ -2,7 +2,7 @@
 
 > **A local, human-readable memory system that gives Claude persistence across sessions.**
 > Markdown files. SQLite FTS5. An MCP server. No cloud, no vector DB, no API keys.
-> Like OpenClaw, but as a self-contained Claude Plugin.
+> Like OpenClaw, but self-contained and local-first, built for Claude Code.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
@@ -24,7 +24,7 @@ https://github.com/user-attachments/assets/b1118cf9-df3f-4a10-be18-d26124a23e5c
 
 It lets you stand up **individual, named coworkers**, each with its own personality and its own persistent memory. PACE agents mature from intern, to junior, to senior over the course of weeks of real work.
 
-- Installs as a single Claude Desktop App plugin. Upload one file and you're done
+- Installs with two commands — or paste the repo URL into Claude Code and ask Claude to set it up for you
 - Run multiple PACE agents on the same machine: one folder per agent, each with its own name, personality, and persistent memory
 - Each PACE agent can handle multiple projects, just like real humans
 - Natural language onboarding, no technical configuration
@@ -89,7 +89,7 @@ Behind the scenes:
 
 ### Status
 
-v0.3.8, beta. Targets **Claude Code** as the primary client. Multiple PACE agents per machine (one per folder) supported as of 0.3.0; first-vault setup is a single CLI command (`pace bootstrap <path>`) as of 0.3.6. The conversational "Onboard me to PACE" path is still wired up but recommended only as a fallback. Cowork support exists but has known technical challenges getting Cowork to recognize the MCP tools (see [Cowork status](#cowork-status) below).
+Beta. Targets **Claude Code** (in the Claude Desktop App) as the primary client. Multiple PACE agents per machine, one per folder. Install is a two-command `uv` flow — or paste the repo URL into a Claude Code session and ask Claude to do it for you (see [Install](#install)). A Claude Desktop plugin also lives in this repo, but plugin installs proved confusing in practice (behavior varies by Claude plan, desktop-app setup, and OS) and are no longer the recommended path. Cowork support exists but has known technical challenges getting Cowork to recognize the MCP tools (see [Cowork status](#cowork-status) below).
 
 290+ tests cover capture, search, compaction, review, the proactive heartbeat, multi-vault resolution, and the MCP surface. Used daily by the maintainer. Mac dogfood pending; Windows + OneDrive is the primary target.
 
@@ -466,56 +466,70 @@ The CLI uses the same chain plus a fourth step, `%APPDATA%\pace\config.json` (Wi
 
 ## Install
 
-Three steps. Total time: under a minute, plus a Claude Desktop restart.
-
-1. **Download `pace-memory.plugin`** from the [releases page](https://github.com/jagbanana/PACE/releases).
-2. **Open the Claude Desktop App** and go to **Customize → Browse Plugins → Personal → Upload Plugin**. Select the `.plugin` file you just downloaded.
-3. **Restart the Claude Desktop App.**
-
-**Prerequisite:** [`uv`](https://docs.astral.sh/uv/) needs to be on your `PATH` so the plugin can run the bundled PACE source. Install with:
+The only prerequisite is [`uv`](https://docs.astral.sh/uv/) — it brings its own Python, so there's nothing else to set up:
 
 - Windows (PowerShell): `irm https://astral.sh/uv/install.ps1 | iex`
 - macOS / Linux: `curl -LsSf https://astral.sh/uv/install.sh | sh`
 
-After installing `uv`, fully quit and relaunch the Claude Desktop App so the new `PATH` propagates.
+Then install PACE one of two ways.
 
-### Stand up your first vault: one CLI command
+### Option A — ask Claude to install it (recommended)
 
-The plugin install above gets `pace-memory.exe` and `uv` on your PATH but does **not** automatically prep a vault folder. Use `pace bootstrap` to do that in one shot:
+Open a Claude Code session in the Claude Desktop App (any folder, **"Use a worktree"** off) and paste:
+
+> Install PACE from https://github.com/jagbanana/PACE and set up a vault for me at `C:\Users\me\Desktop\Bob`. Follow the "Instructions for Claude" in the repo's README.
+
+Claude reads this README and runs the recipe below, asking you a few identity questions along the way. When it finishes, open the vault folder in a new Claude Code session and just talk.
+
+### Option B — install it yourself
+
+Two commands:
 
 ```powershell
 # Windows PowerShell
-pace bootstrap "C:\Users\you\Desktop\Bob"
+uv tool install --force git+https://github.com/jagbanana/PACE.git
+pace init --root "C:\Users\you\Desktop\Bob"
 ```
 
 ```bash
 # macOS / Linux
-pace bootstrap ~/agents/Bob
+uv tool install --force git+https://github.com/jagbanana/PACE.git
+pace init --root ~/agents/Bob
 ```
 
-That command:
+If `pace` isn't recognized right after the install, run `uv tool update-shell` (or restart the terminal) so uv's tool bin is on your PATH.
 
-1. Auto-discovers the pace-memory plugin install under `~/.claude/plugins/marketplaces/*/pace-memory/`.
-2. Runs `uv tool install --force <plugin>/server` so `pace-mcp.exe` lands persistently in `~/.local/bin/` (sub-100ms MCP launches; survives `uv cache clean`).
-3. Creates the vault directory and runs `pace init --plugin-root <plugin>` against it. Writes a project-level `.mcp.json` pointing at the persistent `pace-mcp.exe`.
+Then open the vault folder in Claude Code (**"Use a worktree"** off) and approve the `pace` MCP server when prompted. In your first message, tell Claude your name, an optional nickname + emoji for the assistant, and what you'll work on together — it captures the identity automatically and the vault is live.
 
-When it returns, **open the vault folder in Claude Code** with **"Use a worktree"** unchecked. The PACE MCP tools (`pace_status`, `pace_capture`, …) load on session start. Greet Claude normally. The SKILL runs a brief identity onboarding (your name; an optional nickname/emoji for the assistant; the work you'll do here) the first time, captures it via the now-loaded MCP, and then just talks.
+### Instructions for Claude (installation recipe)
+
+*If you are Claude and a user asked you to install PACE from this repo, follow these steps exactly. Everything runs in the user's shell; there is no plugin to install and no repo clone required.*
+
+1. **Verify `uv`**: run `uv --version`. If it's missing, install it with the platform command above; in the same shell session you may need to prepend it to `PATH` (`$env:PATH = "$env:USERPROFILE\.local\bin;$env:PATH"` on Windows, `export PATH="$HOME/.local/bin:$PATH"` on macOS/Linux).
+2. **Install the CLI + MCP server**: `uv tool install --force git+https://github.com/jagbanana/PACE.git`. This persistently installs the `pace` and `pace-mcp` executables (uv provisions Python 3.11+ automatically). If `pace` isn't on PATH afterwards, find its directory with `uv tool dir --bin` and invoke it by full path.
+3. **Ask the user where the vault should live** — one folder per agent (e.g. `~/agents/Bob`); OneDrive-synced folders are fine. Confirm the path before creating anything.
+4. **Scaffold the vault**: `pace init --root <vault-path>`. This creates `memories/`, `projects/`, `followups/`, `system/`, the SQLite index, a `.mcp.json` pointing at the installed server, and the vault's `CLAUDE.md`. Idempotent — safe to re-run.
+5. **Run identity onboarding** (a CLI-initialized vault skips the conversational first-run flow, so do it now). Ask the user three questions: what to call them; an optional nickname + emoji for the assistant; the rough nature of the work. Then run, **from inside the vault directory**:
+
+   ```
+   pace capture --kind long_term --topic user --tag "#person" --tag "#user" "<NAME> is <ROLE / WORK DESCRIPTION>."
+   pace capture --kind long_term --topic user --tag "#preference" --tag "#user" --tag "#high-signal" "Assistant identity in this vault: nickname '<NICKNAME>', emoji '<EMOJI>'. Address the user as '<NAME>' at the top of every reply (vary the opener); sign with '— <NICKNAME> <EMOJI>' at the bottom."
+   pace capture --kind working --tag "#user" --tag "#high-signal" "Identity bookends: address user as '<NAME>'; sign as '— <NICKNAME> <EMOJI>'. Working on: <WORK DESCRIPTION>."
+   ```
+
+   If the user declined a nickname, skip the second command and drop the sign-off portion from the third.
+6. **Verify**: from the vault directory, `pace status` should print the vault root with no warnings, and `.mcp.json` should exist at the vault root.
+7. **Hand off**: tell the user to open the vault folder in a **new** Claude Code session (**"Use a worktree"** off) and approve the `pace` MCP server when prompted. The `pace_*` tools load at session start; from then on they just talk.
 
 > **Cold-start quirk**: on the very first message in a brand-new vault, Claude Code may briefly report "no PACE tools available." This is a Claude Code MCP-launcher race that affects any project with a project-level `.mcp.json`. Just send a follow-up message; the tools will be connected by the time the second message lands, and every subsequent session loads them instantly. Harmless; nothing to fix on the PACE side.
 
 ![A PACE agent wrapping up identity onboarding in a fresh vault](screenshots/pace-onboarding.png)
 
-<em>Identity onboarding completing in a freshly-bootstrapped vault. Bob (✌️) opts the user into the proactive heartbeat.</em>
-
-If `pace bootstrap` can't find the plugin install (e.g. you installed it from a custom marketplace), pass `--plugin-root` explicitly:
-
-```powershell
-pace bootstrap "C:\Users\you\Desktop\Bob" --plugin-root "$env:USERPROFILE\.claude\plugins\marketplaces\my-marketplace\pace-memory"
-```
+<em>Identity onboarding completing in a freshly-created vault. Bob (✌️) opts the user into the proactive heartbeat.</em>
 
 ### Multiple PACE agents
 
-Run `pace bootstrap` in a different folder to stand up another agent. Each lives in its own folder with its own name, personality, and memory; they don't share context. A common layout:
+The `uv tool install` is once per machine. To stand up another agent, just run `pace init --root <another-folder>`. Each agent lives in its own folder with its own name, personality, and memory; they don't share context. A common layout:
 
 ```
 ~/Documents/agents/
@@ -526,17 +540,23 @@ Run `pace bootstrap` in a different folder to stand up another agent. Each lives
 
 Open whichever folder matches the work you're doing today; that agent's memory loads automatically.
 
-#### About the conversational "Onboard me to PACE" path
+### Updating PACE
 
-A skill in the plugin recognizes phrases like *"Set up PACE"* / *"Onboard me to PACE"* / *"Make this a PACE vault"* and tries to walk a fresh folder through the same bootstrap as `pace bootstrap`. It works some of the time, but Claude Code's skill activation for user-uploaded plugins is currently inconsistent; that's why the CLI command above is the recommended path. If you're already deep in a chat session and want to try it conversationally, `/pace-memory:pace-setup` and the natural-language phrases above are still wired up.
+Re-run the install command; it pulls the latest from GitHub and replaces the tool in place:
+
+```
+uv tool install --force git+https://github.com/jagbanana/PACE.git
+```
+
+Existing vaults keep working untouched — each vault's `.mcp.json` points at the persistent install location, which the reinstall reuses.
 
 ### Cowork status
 
 PACE was originally built for Claude Cowork (the agent-mode tab in the same Desktop app). On v0.1.x, the Cowork plugin path worked. **On v0.2.0+, the Cowork plugin loads but its MCP server doesn't start**. The cause is somewhere in Cowork's account-marketplace upload pipeline, not in PACE itself (the bundled server runs fine when invoked directly). Tracked at [github.com/jagbanana/PACE/issues](https://github.com/jagbanana/PACE/issues). For now, **use Claude Code.**
 
-### Power-user install (from source)
+### Developing PACE (from source)
 
-If you want to develop PACE itself or bypass the plugin entirely:
+If you want to develop PACE itself or run it from a working copy:
 
 ```bash
 git clone https://github.com/jagbanana/PACE.git my-pace-vault
@@ -557,8 +577,8 @@ The model uses MCP tools; humans use the CLI. They share the same underlying fun
 
 | Command | Purpose |
 |---|---|
-| `pace bootstrap <path>` | One-shot first-vault setup: auto-discovers the plugin install, runs `uv tool install`, scaffolds the vault, writes a durable `.mcp.json`. The recommended install path. |
-| `pace init [--root <path>] [--plugin-root <path>]` | Scaffold an empty vault (lower-level than `bootstrap`; does not run `uv tool install`). Idempotent. |
+| `pace bootstrap <path>` | One-shot vault setup **for legacy plugin installs** (auto-discovers a plugin install; fails without one). For the recommended git install, use `uv tool install` + `pace init --root` instead. |
+| `pace init [--root <path>] [--plugin-root <path>]` | Scaffold a vault — the standard way to create each agent's folder after `uv tool install`. Idempotent. |
 | `pace status` | File counts, last-task timestamps, health summary. |
 | `pace capture --kind <k> [--topic <t>] [--project <p>] [--note <n>] [--tag ...] "<text>"` | Persist content. Kinds: `working`, `long_term`, `project_summary`, `project_note`. |
 | `pace search "<query>" [--scope memory\|projects\|all] [--project <p>]` | FTS5 search; ranked snippets. |
@@ -574,7 +594,9 @@ The model uses MCP tools; humans use the CLI. They share the same underlying fun
 
 ---
 
-## Building from source
+## Building the plugin from source
+
+The Claude Desktop plugin is an optional, legacy distribution channel — the recommended install (see [Install](#install)) doesn't use it. To build it anyway:
 
 ```bash
 git clone https://github.com/jagbanana/PACE.git
@@ -635,13 +657,10 @@ The runtime vault directories (`memories/`, `projects/`, `system/`) are created 
 
 ### Claude Code doesn't list `pace_*` tools
 
-Two paths to check. If you installed via the plugin upload (the recommended path):
-
-- Confirm `uv --version` works in your terminal. The plugin's MCP server uses `uvx` to run the bundled source.
-- Fully quit and relaunch the Claude Desktop App. PATH is read at launch; an `uv` install during a running session won't be seen until a clean restart.
-- Check `~/.claude/plugins/installed_plugins.json`. `pace-memory@local-desktop-app-uploads` should appear there after upload + restart.
-
-If you went the power-user / "from source" route, check that `.mcp.json` exists at the vault root. If not, `pace init` didn't complete. The file's `command` field must point at a Python interpreter that has `pace` installed (re-run `pace init` if you moved the venv).
+- Confirm the install: `uv tool list` should show `pace-memory` (providing `pace` and `pace-mcp`).
+- Check that `.mcp.json` exists at the vault root and that its `command` path exists on disk. If you moved or reinstalled things, delete `.mcp.json` and re-run `pace init --root <vault>` to regenerate it (`pace init` never overwrites an existing `.mcp.json`).
+- Fully quit and relaunch the Claude Desktop App, and approve the `pace` MCP server prompt the first time you open the vault folder.
+- If you installed via the legacy plugin upload: confirm `uv --version` works (the plugin runs the bundled source via `uvx`) and check `~/.claude/plugins/installed_plugins.json` lists `pace-memory@...`.
 
 ### "OneDrive has marked vault files as online-only"
 
