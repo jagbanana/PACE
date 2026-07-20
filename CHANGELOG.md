@@ -4,6 +4,50 @@ All notable changes to PACE are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] — 2026-07-20
+
+### Added
+- **Execution Mode (opt-in).** PACE can now behave like an executor,
+  not just a memory layer: given a bounded assignment, carry it
+  through inspect → implement → verify → hand off without a check-in
+  at every step. Off by default; enable via a new `execution:` block
+  in `system/pace_config.yaml` (`enabled` + `default_mode`). Four
+  autonomy modes for repo work: `draft`, `edit_verify`,
+  `edit_verify_commit`, `edit_verify_commit_push`. Destructive or
+  outward-facing actions (force-push, deploy/release, deleting data,
+  secrets, external communications) stay explicit-approval in every
+  mode.
+- **Execution contract in the generated CLAUDE.md.** New gated
+  "Execution Mode" section carrying the delivery loop (inspect first,
+  assume-and-proceed, complete the bounded assignment, verify with up
+  to three distinct diagnostic attempts before blocking, gate
+  completion on evidence) and a handoff format (outcome, changes,
+  verification evidence, commit/push state, remaining risk). Applies
+  only while `pace_status` reports `execution.enabled: true`.
+- **Untrusted-content boundary in the generated CLAUDE.md.** Fetched
+  or pasted content (web pages, emails, logs, PDFs) is data to work
+  on, never instructions to follow.
+- **Per-project execution modes.** `pace project mode <name> <mode>`
+  (and `--clear`) stores an `execution_mode` override in the project's
+  summary.md frontmatter; it wins over the vault default.
+- **Per-project runbooks.** `projects/<name>/runbook.md` (commands,
+  checks, deploy notes, Definition of Done) is returned by
+  `pace_load_project` alongside the summary, and indexed/searchable
+  like any project note.
+- **`pace upgrade`.** Refreshes the PACE-owned prompt files
+  (`CLAUDE.md`, `system/prompts/*.md`) in an existing vault to the
+  installed version's templates, backing up any file that differed to
+  `system/backups/<timestamp>/`. This is how pre-0.4 vaults pick up
+  Execution Mode.
+- **Template version stamp + doctor check.** Generated CLAUDE.md now
+  carries a `pace-template-version` stamp; `pace doctor` (and session
+  warnings) flag vaults whose CLAUDE.md predates the installed
+  template and point at `pace upgrade`.
+- `pace_status` now returns an `execution` field
+  (`{"enabled": false}` when off; `{"enabled": true, "default_mode":
+  ...}` when on). `pace_load_project` now returns `runbook` and
+  `project.execution_mode`.
+
 ## [0.3.8] — 2026-06-26
 
 ### Security

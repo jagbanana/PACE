@@ -91,7 +91,7 @@ Behind the scenes:
 
 Beta. Targets **Claude Code** (in the Claude Desktop App) as the primary client. Multiple PACE agents per machine, one per folder. Install is a two-command `uv` flow — or paste the repo URL into a Claude Code session and ask Claude to do it for you (see [Install](#install)). A Claude Desktop plugin also lives in this repo, but plugin installs proved confusing in practice (behavior varies by Claude plan, desktop-app setup, and OS) and are no longer the recommended path. Cowork support exists but has known technical challenges getting Cowork to recognize the MCP tools (see [Cowork status](#cowork-status) below).
 
-290+ tests cover capture, search, compaction, review, the proactive heartbeat, multi-vault resolution, and the MCP surface. Used daily by the maintainer. Mac dogfood pending; Windows + OneDrive is the primary target.
+320+ tests cover capture, search, compaction, review, the proactive heartbeat, Execution Mode, multi-vault resolution, and the MCP surface. Used daily by the maintainer. Mac dogfood pending; Windows + OneDrive is the primary target.
 
 ---
 
@@ -464,6 +464,32 @@ The CLI uses the same chain plus a fourth step, `%APPDATA%\pace\config.json` (Wi
 
 ---
 
+## Execution Mode *(opt-in, v0.4)*
+
+By default PACE is a memory layer: it makes Claude *know* more each session, but Claude still waits for a nudge at every step ("looks good, now test it… now commit it…"). Execution Mode is the opt-in contract that closes that gap: a request becomes a **bounded assignment** carried through inspect → implement → verify → hand off, with evidence, instead of an edit followed by silence.
+
+Enable it in `system/pace_config.yaml`:
+
+```yaml
+execution:
+  enabled: true
+  default_mode: edit_verify   # draft | edit_verify | edit_verify_commit | edit_verify_commit_push
+```
+
+The mode sets how far Claude goes on its own for repo work — propose only (`draft`), edit and run checks (`edit_verify`), also commit, or also push. Per-project overrides win over the default: `pace project mode <name> <mode>` stores an `execution_mode` field in the project's `summary.md` frontmatter. **In every mode**, force-push, deploy/release, deleting data, secrets/security changes, and external communications stay explicit-approval.
+
+What turns on (all of it lives in the generated `CLAUDE.md`, gated on `pace_status` returning `execution.enabled: true` — disabled vaults are unaffected):
+
+- **A delivery loop** — inspect the code/docs/tests first; state assumptions and proceed instead of pinging at every fork; implement all directly implied work; verify proportionately with up to three distinct diagnostic attempts before reporting a blocker; never claim "done" without having seen the checks pass.
+- **A handoff format** — outcome, what changed, verification evidence, commit/push state, remaining risk or next action.
+- **Per-project runbooks** — Claude creates and maintains `projects/<name>/runbook.md` (setup, lint/test/build commands, smoke checks, deploy notes, Definition of Done). `pace_load_project` returns it with the summary, so "what should I run?" is answered once, permanently.
+
+One boundary PACE can't move: in Claude Code, tool **permission prompts** come from the client's own settings, not from the model's hesitancy. Execution Mode fixes the behavioral half (not proceeding without a nudge); for the mechanical half, Claude will offer to add a conservative allowlist (the project's test/lint/build commands, `git commit`) to that repo's `.claude/settings.json` — never push, deploy, or deletion permissions unless you explicitly ask.
+
+Existing vaults created before v0.4 pick all of this up with one command: `pace upgrade` (see the CLI reference below).
+
+---
+
 ## Install
 
 The only prerequisite is [`uv`](https://docs.astral.sh/uv/) — it brings its own Python, so there's nothing else to set up:
@@ -550,6 +576,8 @@ uv tool install --force git+https://github.com/jagbanana/PACE.git
 
 Existing vaults keep working untouched — each vault's `.mcp.json` points at the persistent install location, which the reinstall reuses.
 
+If the new version ships template changes (new sections in the generated `CLAUDE.md`, updated maintenance prompts), existing vaults don't get them automatically — `pace init` never overwrites files. Run `pace upgrade` inside each vault to refresh the PACE-owned files; anything that differed is backed up to `system/backups/<timestamp>/` first, and `pace doctor` will remind you when a vault's `CLAUDE.md` predates the installed template.
+
 ### Cowork status
 
 PACE was originally built for Claude Cowork (the agent-mode tab in the same Desktop app). On v0.1.x, the Cowork plugin path worked. **On v0.2.0+, the Cowork plugin loads but its MCP server doesn't start**. The cause is somewhere in Cowork's account-marketplace upload pipeline, not in PACE itself (the bundled server runs fine when invoked directly). Tracked at [github.com/jagbanana/PACE/issues](https://github.com/jagbanana/PACE/issues). For now, **use Claude Code.**
@@ -583,6 +611,8 @@ The model uses MCP tools; humans use the CLI. They share the same underlying fun
 | `pace capture --kind <k> [--topic <t>] [--project <p>] [--note <n>] [--tag ...] "<text>"` | Persist content. Kinds: `working`, `long_term`, `project_summary`, `project_note`. |
 | `pace search "<query>" [--scope memory\|projects\|all] [--project <p>]` | FTS5 search; ranked snippets. |
 | `pace project list` / `create` / `load` / `rename` / `alias add\|remove` | Project lifecycle. |
+| `pace project mode <name> <mode>` / `--clear` | Set or clear a project's Execution Mode override (v0.4). |
+| `pace upgrade` | Refresh PACE-owned prompt files (`CLAUDE.md`, `system/prompts/`) to the installed version's templates; prior versions are backed up to `system/backups/<timestamp>/` (v0.4). |
 | `pace compact --plan` / `--apply <file>` | Daily compaction. |
 | `pace review --plan` / `--apply <file>` | Weekly review. |
 | `pace heartbeat --plan` / `--apply <file>` | Proactive heartbeat (v0.2). |

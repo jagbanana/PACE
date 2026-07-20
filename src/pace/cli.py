@@ -36,6 +36,7 @@ from pace import frontmatter as fm_parser
 from pace import heartbeat as heartbeat_ops
 from pace import projects as project_ops
 from pace import review as review_ops
+from pace import settings as pace_settings
 from pace import vault as vault_ops
 from pace.capture import capture as capture_entry
 from pace.index import Index, now_iso
@@ -740,6 +741,34 @@ def archive(path: Path) -> None:
 
 
 @main.command()
+def upgrade() -> None:
+    """Refresh PACE-owned prompt files (CLAUDE.md, system/prompts/) to the
+    templates shipped with this pace version.
+
+    Files that differ are backed up to system/backups/<timestamp>/ before
+    being rewritten. Memories, projects, followups, pace_config.yaml,
+    .mcp.json, and .gitignore are never touched. Don't run this inside
+    the PACE source repo — its CLAUDE.md carries development sections.
+    """
+    root = require_vault_root()
+    result = vault_ops.upgrade(root)
+
+    if not result.updated:
+        click.echo("Already up to date — every PACE-owned file matches "
+                   "the installed templates.")
+        return
+
+    click.echo(f"Upgraded {len(result.updated)} file(s) at {result.root}:")
+    for rel in result.updated:
+        click.echo(f"  ~ {rel}")
+    if result.unchanged:
+        click.echo(f"  ({len(result.unchanged)} already current)")
+    if result.backup_dir:
+        click.echo(f"Previous versions backed up to {result.backup_dir}/. "
+                   "Re-apply any customizations from there.")
+
+
+@main.command()
 def reindex() -> None:
     """Rebuild the FTS5 index from the markdown on disk."""
     root = require_vault_root()
@@ -814,12 +843,56 @@ def project_load(name_or_alias: str) -> None:
         result = project_ops.load_project(root, name_or_alias, index=idx)
     if result is None:
         raise click.ClickException(f"No project matched {name_or_alias!r}.")
-    proj, body = result
+    proj = result.project
     click.echo(f"# {proj.title}  ({proj.name})")
     if proj.aliases:
         click.echo(f"aliases: {', '.join(proj.aliases)}")
+    if proj.execution_mode:
+        click.echo(f"execution_mode: {proj.execution_mode}")
     click.echo("")
-    click.echo(body or "(empty summary)")
+    click.echo(result.summary or "(empty summary)")
+    if result.runbook:
+        click.echo("")
+        click.echo("## Runbook")
+        click.echo(result.runbook)
+
+
+@project_group.command("mode")
+@click.argument("name", type=str)
+@click.argument(
+    "mode",
+    type=click.Choice([*pace_settings.EXECUTION_MODES]),
+    required=False,
+)
+@click.option(
+    "--clear",
+    "clear",
+    is_flag=True,
+    help="Remove the project's override so the vault default applies.",
+)
+def project_mode(name: str, mode: str | None, clear: bool) -> None:
+    """Set (or --clear) a project's Execution Mode override.
+
+    The override is stored as `execution_mode` in the project's
+    summary.md frontmatter and wins over `execution.default_mode` in
+    system/pace_config.yaml. It only has effect while Execution Mode
+    is enabled (`execution.enabled: true`).
+    """
+    if clear == (mode is not None):
+        raise click.UsageError("Pass exactly one of MODE or --clear.")
+    root = require_vault_root()
+    with _open_index(root) as idx:
+        try:
+            proj = project_ops.set_execution_mode(
+                root, name, None if clear else mode, index=idx
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            raise click.ClickException(str(exc)) from exc
+    if proj.execution_mode is None:
+        click.echo(f"Cleared execution-mode override for {proj.name}; "
+                   "the vault default applies.")
+    else:
+        click.echo(f"{proj.name}: execution_mode = {proj.execution_mode}")
 
 
 @project_group.command("rename")

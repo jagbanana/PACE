@@ -104,9 +104,9 @@ def test_load_returns_summary_body(vault: Path, index: Index) -> None:
     )
     result = projects.load_project(vault, "Alpha", index=index)
     assert result is not None
-    proj, body = result
-    assert proj.name == "Alpha"
-    assert "kickoff complete" in body
+    assert result.project.name == "Alpha"
+    assert "kickoff complete" in result.summary
+    assert result.runbook is None
 
 
 def test_load_records_project_load_ref(vault: Path, index: Index) -> None:

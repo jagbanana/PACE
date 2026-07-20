@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from pace import frontmatter, wikilinks
+from pace import settings as pace_settings
 from pace.index import Index, now_iso
 from pace.io import atomic_write_text
 from pace.paths import PROJECTS_DIR, kind_from_path, project_from_path
@@ -25,6 +26,13 @@ from pace.paths import PROJECTS_DIR, kind_from_path, project_from_path
 # Project directory names: alphanumerics, underscore, hyphen. Conservative on
 # purpose — we want filesystems and wikilinks to behave consistently.
 _PROJECT_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_\-]*$")
+
+# Per-project runbook, a peer of summary.md. Freeform markdown holding the
+# project's operational knowledge: setup/lint/test/build commands, smoke
+# checks, deploy notes, Definition of Done. Indexed as a regular
+# project_note by kind_from_path, so it's searchable; loaded alongside the
+# summary by load_project so Execution Mode has it in context.
+RUNBOOK_FILENAME = "runbook.md"
 
 
 @dataclass(frozen=True)
@@ -39,10 +47,27 @@ class Project:
     aliases: list[str]
     date_created: str
     date_modified: str
+    # Per-project Execution Mode override from summary.md frontmatter.
+    # None means "no override; the vault default from pace_config.yaml
+    # applies". Only ever one of settings.EXECUTION_MODES.
+    execution_mode: str | None = None
 
     @property
     def summary_relpath(self) -> str:
         return f"{PROJECTS_DIR}/{self.name}/summary.md"
+
+    @property
+    def runbook_path(self) -> Path:
+        return self.root_dir / RUNBOOK_FILENAME
+
+
+@dataclass(frozen=True)
+class LoadedProject:
+    """What ``load_project`` hands back: the project plus its documents."""
+
+    project: Project
+    summary: str
+    runbook: str | None  # body of runbook.md, or None if absent
 
 
 # ---- Listing & resolution ---------------------------------------------
@@ -166,12 +191,15 @@ def load_project(
     name_or_alias: str,
     *,
     index: Index,
-) -> tuple[Project, str] | None:
-    """Resolve, read ``summary.md``, and record a ``project_load`` ref.
+) -> LoadedProject | None:
+    """Resolve, read ``summary.md`` (+ runbook), record a ``project_load`` ref.
 
-    Returns ``(project, summary_body)`` on success or ``None`` if no
+    Returns a :class:`LoadedProject` on success or ``None`` if no
     project matched. The ``project_load`` row is *only* recorded on a
     successful resolve — failed lookups don't pollute reference counts.
+
+    The runbook is read from disk rather than the index so a
+    just-edited runbook is always current, even before a reindex.
     """
     proj = resolve(root, name_or_alias, index)
     if proj is None:
@@ -180,11 +208,17 @@ def load_project(
     text = proj.summary_path.read_text(encoding="utf-8")
     _, body = frontmatter.parse(text)
 
+    runbook: str | None = None
+    if proj.runbook_path.is_file():
+        _, runbook = frontmatter.parse(
+            proj.runbook_path.read_text(encoding="utf-8")
+        )
+
     target_id = index.get_id(proj.summary_relpath)
     if target_id is not None:
         index.record_ref(target_id=target_id, ref_type="project_load")
 
-    return proj, body
+    return LoadedProject(project=proj, summary=body, runbook=runbook)
 
 
 def add_alias(root: Path, name: str, alias: str, *, index: Index) -> Project:
@@ -200,6 +234,50 @@ def remove_alias(root: Path, name: str, alias: str, *, index: Index) -> Project:
     needle = alias.strip().lower()
     aliases = [a for a in proj.aliases if a.strip().lower() != needle]
     return _rewrite_summary_aliases(root, proj, aliases, index=index)
+
+
+def set_execution_mode(
+    root: Path,
+    name: str,
+    mode: str | None,
+    *,
+    index: Index,
+) -> Project:
+    """Set (or clear, with ``None``) a project's Execution Mode override.
+
+    The override lives in ``summary.md`` frontmatter as
+    ``execution_mode`` and wins over the vault-wide default in
+    ``pace_config.yaml``. Invalid modes raise ``ValueError`` — this is
+    an explicit user decision, not tolerant config parsing.
+    """
+    if mode is not None and mode not in pace_settings.EXECUTION_MODES:
+        raise ValueError(
+            f"Unknown execution mode {mode!r}. "
+            f"Valid modes: {', '.join(pace_settings.EXECUTION_MODES)}."
+        )
+
+    proj = _require_project(root, name)
+    text = proj.summary_path.read_text(encoding="utf-8")
+    fm, body = frontmatter.parse(text)
+    if mode is None:
+        fm.pop("execution_mode", None)
+    else:
+        fm["execution_mode"] = mode
+    fm["date_modified"] = now_iso()
+    atomic_write_text(proj.summary_path, frontmatter.dump(fm, body))
+
+    index.upsert_file(
+        path=proj.summary_relpath,
+        kind="project_summary",
+        project=proj.name,
+        title=str(fm.get("title") or proj.title),
+        body=body,
+        aliases=list(fm.get("aliases") or []),
+        tags=list(fm.get("tags") or []),
+        date_created=str(fm.get("date_created") or proj.date_created),
+        date_modified=str(fm.get("date_modified")),
+    )
+    return _project_from_fm(root, proj.name, fm)
 
 
 def rename_project(
@@ -315,6 +393,11 @@ def _project_from_fm(root: Path, name: str, fm: dict) -> Project:
         aliases=list(fm.get("aliases") or []),
         date_created=str(fm.get("date_created") or now_iso()),
         date_modified=str(fm.get("date_modified") or now_iso()),
+        # Tolerant here (unlike set_execution_mode): a hand-edited typo
+        # in frontmatter degrades to "use the vault default", not a crash.
+        execution_mode=pace_settings.coerce_execution_mode(
+            fm.get("execution_mode"), None
+        ),
     )
 
 

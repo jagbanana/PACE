@@ -21,6 +21,9 @@ Checks performed:
 * ``scheduled_task_stale``  — ``last_compact``/``last_review``
   timestamps older than expected slots, or never recorded — proxy for
   "lazy maintenance (or a Routine) isn't running".
+* ``claude_md_outdated``    — the vault's CLAUDE.md carries an older
+  ``pace-template-version`` stamp (or none) than the installed pace
+  ships; ``pace upgrade`` refreshes it.
 
 Resolution is always user-initiated. Doctor never deletes files,
 mutates frontmatter, or reorganizes the vault.
@@ -36,6 +39,7 @@ from pathlib import Path
 from pace import frontmatter, wikilinks
 from pace import settings as pace_settings
 from pace.index import Index
+from pace.onboarding import CLAUDE_MD_TEMPLATE_VERSION, template_version_of
 from pace.paths import INDEX_DB, WORKING_MEMORY
 
 # Windows file-attribute flags. Python's ``os.stat_result.st_file_attributes``
@@ -106,6 +110,7 @@ def run_all(root: Path, index: Index, *, now: datetime | None = None) -> HealthR
     issues.extend(check_conflicted_copies(root))
     issues.extend(check_scheduled_task_freshness(index, now=now))
     issues.extend(check_working_memory_size(root, settings))
+    issues.extend(check_claude_md_template(root))
     return HealthReport(root=root.resolve(), issues=issues)
 
 
@@ -433,6 +438,52 @@ def check_working_memory_size(
                 "--plan` then `pace compact --apply`). The apply step "
                 "force-promotes oldest entries to long-term storage until "
                 "the body is under the soft target."
+            ),
+        )
+    ]
+
+
+def check_claude_md_template(root: Path) -> list[HealthIssue]:
+    """Flag a vault CLAUDE.md generated from an outdated template.
+
+    Every generated CLAUDE.md carries a ``pace-template-version`` stamp
+    (since v0.4.0). A missing stamp means the vault predates stamping
+    (or the file was fully hand-written); an older stamp means the
+    installed pace ships newer behavioral content (e.g. Execution
+    Mode). Either way ``pace upgrade`` refreshes the PACE-owned files,
+    backing up the previous versions to ``system/backups/`` first —
+    doctor never rewrites anything itself.
+
+    A *newer* stamp than the installed version is left alone: that just
+    means pace itself is behind the vault, and nagging about it from
+    the older binary would be noise.
+    """
+    path = root / "CLAUDE.md"
+    if not path.is_file():
+        return []
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return []
+
+    version = template_version_of(text)
+    if version is not None and version >= CLAUDE_MD_TEMPLATE_VERSION:
+        return []
+
+    found = "no version stamp" if version is None else f"v{version}"
+    return [
+        HealthIssue(
+            severity="warning",
+            code="claude-md-outdated",
+            message=(
+                f"CLAUDE.md was generated from an older PACE template "
+                f"({found}; current is v{CLAUDE_MD_TEMPLATE_VERSION})."
+            ),
+            fix_hint=(
+                "Run `pace upgrade` to refresh CLAUDE.md and "
+                "system/prompts/ to the installed version. Previous "
+                "copies are backed up to system/backups/ — re-apply "
+                "any customizations from there."
             ),
         )
     ]

@@ -226,6 +226,13 @@ def pace_status() -> dict[str, Any]:
                            top of your first reply (highest priority
                            first); empty list if none. Resolve via
                            pace_resolve_followup once acted on.
+        execution        — {"enabled": bool, "default_mode": str}.
+                           When enabled, the "Execution Mode" section
+                           of CLAUDE.md applies: carry bounded
+                           assignments through to completion under
+                           default_mode (projects may override via
+                           their execution_mode frontmatter). When
+                           disabled, ignore that section entirely.
         warnings         — list of human-readable issues to raise
 
     Example: ``pace_status()`` — no arguments.
@@ -245,6 +252,7 @@ def pace_status() -> dict[str, Any]:
             "needs_heartbeat": False,
             "working_memory": "",
             "inbox": [],
+            "execution": {"enabled": False},
             "warnings": [],
         }
 
@@ -282,6 +290,15 @@ def pace_status() -> dict[str, Any]:
         "needs_heartbeat": _needs_heartbeat(settings, last_heartbeat),
         "working_memory": wm_body,
         "inbox": inbox,
+        # Kept to two keys on purpose: the *semantics* of the modes live
+        # in CLAUDE.md's gated section, so disabled vaults pay ~zero
+        # tokens and enabled vaults get just the resolved policy.
+        "execution": {
+            "enabled": settings.execution_enabled,
+            "default_mode": settings.execution_default_mode,
+        }
+        if settings.execution_enabled
+        else {"enabled": False},
         "warnings": doctor_ops.report_to_warnings(report),
     }
 
@@ -424,9 +441,16 @@ def pace_load_project(name: str) -> dict[str, Any]:
     the user to clarify rather than guessing. Never fabricate a project.
 
     Returns:
-        ``{"project": {"name", "title", "aliases", "summary_path"},
-           "summary": "<body>"}`` on success.
+        ``{"project": {"name", "title", "aliases", "summary_path",
+           "execution_mode"}, "summary": "<body>",
+           "runbook": "<body or null>"}`` on success.
         ``{"error": "no project matched <name>"}`` otherwise.
+
+        ``runbook`` is the body of ``projects/<name>/runbook.md`` (the
+        project's commands, checks, and Definition of Done) when one
+        exists. ``execution_mode`` is the project's Execution Mode
+        override, or null when the vault default applies — both only
+        matter when Execution Mode is enabled (see CLAUDE.md).
 
     Example: ``pace_load_project(name="alpha effort")``
     """
@@ -443,7 +467,7 @@ def pace_load_project(name: str) -> dict[str, Any]:
     if result is None:
         return {"error": f"No project matched {name!r}."}
 
-    proj, summary_body = result
+    proj = result.project
     return {
         "project": {
             "name": proj.name,
@@ -452,8 +476,10 @@ def pace_load_project(name: str) -> dict[str, Any]:
             "summary_path": proj.summary_relpath,
             "date_created": proj.date_created,
             "date_modified": proj.date_modified,
+            "execution_mode": proj.execution_mode,
         },
-        "summary": summary_body,
+        "summary": result.summary,
+        "runbook": result.runbook,
     }
 
 

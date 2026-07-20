@@ -16,6 +16,7 @@ import os
 import subprocess
 import sys
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 from pace import config as pace_config
@@ -285,6 +286,78 @@ class ReindexResult:
     indexed: int
     removed: int
     skipped: int
+
+
+# Where ``pace upgrade`` parks the previous version of any file it
+# rewrites. One timestamped subdirectory per run, mirroring vault
+# structure, so nothing is ever lost even outside git.
+BACKUPS_DIR = "system/backups"
+
+
+@dataclass(frozen=True)
+class UpgradeResult:
+    """Outcome of ``pace upgrade`` — which PACE-owned files were refreshed."""
+
+    root: Path
+    updated: list[str]     # vault-relative paths rewritten (or created)
+    unchanged: list[str]   # already matched the current templates
+    backup_dir: str | None  # vault-relative dir holding pre-upgrade copies
+
+
+def upgrade(root: Path) -> UpgradeResult:
+    """Refresh the PACE-owned prompt files in an existing vault.
+
+    Rewrites ``CLAUDE.md`` and ``system/prompts/{compact,review,
+    heartbeat}.md`` to the templates shipped with the installed pace
+    version, backing up any file that differed to
+    ``system/backups/<timestamp>/`` first. This is how pre-existing
+    vaults pick up new behavioral contracts (e.g. Execution Mode) —
+    ``pace init`` deliberately never overwrites these files.
+
+    User state is never touched: memories, projects, followups,
+    ``pace_config.yaml``, ``.mcp.json``, and ``.gitignore`` all stay
+    as they are.
+
+    Note for developers: don't run this inside the PACE *source repo* —
+    its root CLAUDE.md carries repo-development sections that a vault
+    CLAUDE.md doesn't.
+    """
+    root = root.resolve()
+
+    targets: tuple[tuple[str, str], ...] = (
+        (CLAUDE_MD_PATH, CLAUDE_MD_TEMPLATE),
+        (COMPACT_PROMPT_PATH, COMPACT_PROMPT),
+        (REVIEW_PROMPT_PATH, REVIEW_PROMPT),
+        (HEARTBEAT_PROMPT_PATH, HEARTBEAT_PROMPT),
+    )
+
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    backup_root = root / BACKUPS_DIR / stamp
+
+    updated: list[str] = []
+    unchanged: list[str] = []
+    backed_up = False
+
+    for rel, content in targets:
+        path = root / rel
+        if path.is_file():
+            current = path.read_text(encoding="utf-8")
+            if current == content:
+                unchanged.append(rel)
+                continue
+            backup_path = backup_root / rel
+            backup_path.parent.mkdir(parents=True, exist_ok=True)
+            atomic_write_text(backup_path, current)
+            backed_up = True
+        atomic_write_text(path, content)
+        updated.append(rel)
+
+    return UpgradeResult(
+        root=root,
+        updated=updated,
+        unchanged=unchanged,
+        backup_dir=f"{BACKUPS_DIR}/{stamp}" if backed_up else None,
+    )
 
 
 def init(root: Path, *, plugin_root: Path | None = None) -> InitResult:
@@ -585,8 +658,10 @@ def _default_title_for(rel: str) -> str:
 __all__ = [
     "InitResult",
     "ReindexResult",
+    "UpgradeResult",
     "VAULT_DIRS",
     "VAULT_GITIGNORE",
     "init",
     "reindex",
+    "upgrade",
 ]

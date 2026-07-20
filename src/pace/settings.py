@@ -26,6 +26,12 @@ Schema (all optional; defaults baked into :class:`Settings`):
       pattern_min_repeats: 3           # how many similar captures to
                                        # surface as a pattern candidate
 
+    execution:
+      enabled: false               # Opt-in Execution Mode (see CLAUDE.md).
+      default_mode: edit_verify    # draft | edit_verify |
+                                   # edit_verify_commit |
+                                   # edit_verify_commit_push
+
 If the file is missing, defaults apply silently. If parsing fails (bad
 YAML, unexpected types), defaults apply and the error is swallowed —
 this is operational state read on every ``pace_status`` call, and we'd
@@ -57,6 +63,21 @@ DEFAULT_HEARTBEAT_CADENCE_MIN = 60
 DEFAULT_STALE_AGE_DAYS = 7
 DEFAULT_PATTERN_MIN_REPEATS = 3
 
+# Execution Mode (opt-in). Modes are ordered by how much of the
+# implement→verify→commit→push pipeline the model may run without
+# checking in. Destructive/irreversible actions (force-push, deploys,
+# deleting data, secrets, external communications) stay
+# explicit-approval in every mode — that boundary lives in the
+# CLAUDE.md contract, not here.
+EXECUTION_MODES: tuple[str, ...] = (
+    "draft",
+    "edit_verify",
+    "edit_verify_commit",
+    "edit_verify_commit_push",
+)
+DEFAULT_EXECUTION_ENABLED = False
+DEFAULT_EXECUTION_MODE = "edit_verify"
+
 # Path of the config file relative to the vault root.
 SETTINGS_FILE = "system/pace_config.yaml"
 
@@ -76,6 +97,9 @@ class Settings:
     heartbeat_cadence_minutes: int = DEFAULT_HEARTBEAT_CADENCE_MIN
     heartbeat_stale_age_days: int = DEFAULT_STALE_AGE_DAYS
     heartbeat_pattern_min_repeats: int = DEFAULT_PATTERN_MIN_REPEATS
+
+    execution_enabled: bool = DEFAULT_EXECUTION_ENABLED
+    execution_default_mode: str = DEFAULT_EXECUTION_MODE
 
 
 def load(root: Path) -> Settings:
@@ -104,6 +128,10 @@ def load(root: Path) -> Settings:
     if not isinstance(hb, dict):
         hb = {}
 
+    ex = raw.get("execution") or {}
+    if not isinstance(ex, dict):
+        ex = {}
+
     return Settings(
         working_memory_soft_chars=_coerce_int(
             wm.get("soft_chars"), DEFAULT_WORKING_MEMORY_SOFT_CHARS
@@ -130,6 +158,10 @@ def load(root: Path) -> Settings:
         heartbeat_pattern_min_repeats=_coerce_int(
             hb.get("pattern_min_repeats"), DEFAULT_PATTERN_MIN_REPEATS
         ),
+        execution_enabled=bool(ex.get("enabled", DEFAULT_EXECUTION_ENABLED)),
+        execution_default_mode=coerce_execution_mode(
+            ex.get("default_mode"), DEFAULT_EXECUTION_MODE
+        ),
     )
 
 
@@ -148,6 +180,19 @@ def write_default_if_missing(root: Path) -> Path | None:
     # the same invariant every other vault write upholds.
     atomic_write_text(path, _DEFAULT_YAML)
     return path
+
+
+def coerce_execution_mode(value: object, default: str | None) -> str | None:
+    """Validate an execution-mode string against :data:`EXECUTION_MODES`.
+
+    Shared with :mod:`pace.projects` (per-project ``execution_mode``
+    frontmatter) so both layers accept exactly the same vocabulary.
+    Returns ``default`` on anything unrecognized.
+    """
+    if not isinstance(value, str):
+        return default
+    mode = value.strip().lower()
+    return mode if mode in EXECUTION_MODES else default
 
 
 def _coerce_int(value: object, default: int) -> int:
@@ -240,4 +285,24 @@ heartbeat:
   # repeated patterns. See plugin docs for what these mean.
   stale_age_days: 7
   pattern_min_repeats: 3
+
+execution:
+  # Execution Mode: opt-in contract that has the model carry a bounded
+  # assignment through inspect -> implement -> verify -> hand off
+  # without a check-in at every step. The behavioral rules live in
+  # CLAUDE.md ("Execution Mode" section) and only apply while this is
+  # true. Off by default: PACE stays a pure memory layer until you ask.
+  enabled: false
+
+  # How far down the pipeline the model may go on its own for repo
+  # work, unless a project's summary.md frontmatter sets its own
+  # execution_mode (project overrides win):
+  #   draft                    - propose changes only; no file edits
+  #   edit_verify              - edit files and run tests/checks
+  #   edit_verify_commit       - also create commits
+  #   edit_verify_commit_push  - also push to the remote
+  # Destructive or outward-facing actions (force-push, deploy/release,
+  # deleting data, secrets or security config, sending external
+  # communications) always require explicit approval, in every mode.
+  default_mode: edit_verify
 """
