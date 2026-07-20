@@ -311,7 +311,7 @@ def upgrade(root: Path) -> UpgradeResult:
     heartbeat}.md`` to the templates shipped with the installed pace
     version, backing up any file that differed to
     ``system/backups/<timestamp>/`` first. This is how pre-existing
-    vaults pick up new behavioral contracts (e.g. Execution Mode) —
+    vaults pick up new behavioral contracts (e.g. Beast Mode) —
     ``pace init`` deliberately never overwrites these files.
 
     User state is never touched: memories, projects, followups,

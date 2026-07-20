@@ -27,7 +27,7 @@ Schema (all optional; defaults baked into :class:`Settings`):
                                        # surface as a pattern candidate
 
     execution:
-      enabled: false               # Opt-in Execution Mode (see CLAUDE.md).
+      enabled: false               # Opt-in Beast Mode (see CLAUDE.md).
       default_mode: edit_verify    # draft | edit_verify |
                                    # edit_verify_commit |
                                    # edit_verify_commit_push
@@ -63,7 +63,7 @@ DEFAULT_HEARTBEAT_CADENCE_MIN = 60
 DEFAULT_STALE_AGE_DAYS = 7
 DEFAULT_PATTERN_MIN_REPEATS = 3
 
-# Execution Mode (opt-in). Modes are ordered by how much of the
+# Beast Mode (opt-in). Modes are ordered by how much of the
 # implement→verify→commit→push pipeline the model may run without
 # checking in. Destructive/irreversible actions (force-push, deploys,
 # deleting data, secrets, external communications) stay
@@ -287,10 +287,10 @@ heartbeat:
   pattern_min_repeats: 3
 
 execution:
-  # Execution Mode: opt-in contract that has the model carry a bounded
+  # Beast Mode: opt-in contract that has the model carry a bounded
   # assignment through inspect -> implement -> verify -> hand off
   # without a check-in at every step. The behavioral rules live in
-  # CLAUDE.md ("Execution Mode" section) and only apply while this is
+  # CLAUDE.md ("Beast Mode" section) and only apply while this is
   # true. Off by default: PACE stays a pure memory layer until you ask.
   enabled: false
 

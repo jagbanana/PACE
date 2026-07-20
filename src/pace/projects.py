@@ -31,7 +31,7 @@ _PROJECT_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_\-]*$")
 # project's operational knowledge: setup/lint/test/build commands, smoke
 # checks, deploy notes, Definition of Done. Indexed as a regular
 # project_note by kind_from_path, so it's searchable; loaded alongside the
-# summary by load_project so Execution Mode has it in context.
+# summary by load_project so Beast Mode has it in context.
 RUNBOOK_FILENAME = "runbook.md"
 
 
@@ -47,7 +47,7 @@ class Project:
     aliases: list[str]
     date_created: str
     date_modified: str
-    # Per-project Execution Mode override from summary.md frontmatter.
+    # Per-project Beast Mode override from summary.md frontmatter.
     # None means "no override; the vault default from pace_config.yaml
     # applies". Only ever one of settings.EXECUTION_MODES.
     execution_mode: str | None = None
@@ -243,7 +243,7 @@ def set_execution_mode(
     *,
     index: Index,
 ) -> Project:
-    """Set (or clear, with ``None``) a project's Execution Mode override.
+    """Set (or clear, with ``None``) a project's Beast Mode override.
 
     The override lives in ``summary.md`` frontmatter as
     ``execution_mode`` and wins over the vault-wide default in
@@ -252,7 +252,7 @@ def set_execution_mode(
     """
     if mode is not None and mode not in pace_settings.EXECUTION_MODES:
         raise ValueError(
-            f"Unknown execution mode {mode!r}. "
+            f"Unknown Beast Mode value {mode!r}. "
             f"Valid modes: {', '.join(pace_settings.EXECUTION_MODES)}."
         )
 

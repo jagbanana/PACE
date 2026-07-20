@@ -227,7 +227,7 @@ def pace_status() -> dict[str, Any]:
                            first); empty list if none. Resolve via
                            pace_resolve_followup once acted on.
         execution        — {"enabled": bool, "default_mode": str}.
-                           When enabled, the "Execution Mode" section
+                           When enabled, the "Beast Mode" section
                            of CLAUDE.md applies: carry bounded
                            assignments through to completion under
                            default_mode (projects may override via
@@ -448,9 +448,9 @@ def pace_load_project(name: str) -> dict[str, Any]:
 
         ``runbook`` is the body of ``projects/<name>/runbook.md`` (the
         project's commands, checks, and Definition of Done) when one
-        exists. ``execution_mode`` is the project's Execution Mode
+        exists. ``execution_mode`` is the project's Beast Mode
         override, or null when the vault default applies — both only
-        matter when Execution Mode is enabled (see CLAUDE.md).
+        matter when Beast Mode is enabled (see CLAUDE.md).
 
     Example: ``pace_load_project(name="alpha effort")``
     """

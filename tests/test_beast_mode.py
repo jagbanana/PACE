@@ -1,8 +1,8 @@
-"""Execution Mode (v0.4.0): settings, per-project overrides, runbooks,
+"""Beast Mode (v0.4.0): settings, per-project overrides, runbooks,
 template stamping, `pace upgrade`, and the doctor drift check.
 
 The behavioral contract itself lives in prose (CLAUDE.md's gated
-"Execution Mode" section); these tests pin the plumbing that gates it —
+"Beast Mode" section); these tests pin the plumbing that gates it —
 config parsing, pace_status surfacing, project frontmatter, and the
 upgrade path that carries the new template into pre-existing vaults.
 """
@@ -197,7 +197,7 @@ def test_template_version_of_unstamped_is_none() -> None:
 
 
 def test_template_has_gated_execution_section() -> None:
-    assert "## Execution Mode" in CLAUDE_MD_TEMPLATE
+    assert "## Beast Mode" in CLAUDE_MD_TEMPLATE
     # The gate must be explicit in both directions.
     assert "execution.enabled: true" in CLAUDE_MD_TEMPLATE
     assert "ignore this entire section" in CLAUDE_MD_TEMPLATE

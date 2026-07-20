@@ -871,11 +871,11 @@ def project_load(name_or_alias: str) -> None:
     help="Remove the project's override so the vault default applies.",
 )
 def project_mode(name: str, mode: str | None, clear: bool) -> None:
-    """Set (or --clear) a project's Execution Mode override.
+    """Set (or --clear) a project's Beast Mode override.
 
     The override is stored as `execution_mode` in the project's
     summary.md frontmatter and wins over `execution.default_mode` in
-    system/pace_config.yaml. It only has effect while Execution Mode
+    system/pace_config.yaml. It only has effect while Beast Mode
     is enabled (`execution.enabled: true`).
     """
     if clear == (mode is not None):

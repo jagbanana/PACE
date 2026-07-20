@@ -449,7 +449,7 @@ def check_claude_md_template(root: Path) -> list[HealthIssue]:
     Every generated CLAUDE.md carries a ``pace-template-version`` stamp
     (since v0.4.0). A missing stamp means the vault predates stamping
     (or the file was fully hand-written); an older stamp means the
-    installed pace ships newer behavioral content (e.g. Execution
+    installed pace ships newer behavioral content (e.g. Beast
     Mode). Either way ``pace upgrade`` refreshes the PACE-owned files,
     backing up the previous versions to ``system/backups/`` first —
     doctor never rewrites anything itself.
