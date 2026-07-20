@@ -34,7 +34,16 @@ CREATE TABLE IF NOT EXISTS files (
     aliases TEXT,
     date_created TEXT NOT NULL,
     date_modified TEXT NOT NULL,
-    tags TEXT
+    tags TEXT,
+    -- Wall-clock time this row was last written by upsert_file. Distinct
+    -- from date_modified (which mirrors the file's frontmatter and only
+    -- moves when content is edited through PACE): a hand-edit in Obsidian
+    -- bumps the file's disk mtime but not its frontmatter, so drift
+    -- detection must compare mtime against *when we indexed*, not against
+    -- a frontmatter date the edit never touched. Nullable for rows written
+    -- before this column existed; such rows fall back to date_modified
+    -- until the next reindex backfills indexed_at.
+    indexed_at TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_files_kind ON files(kind);
@@ -101,6 +110,10 @@ class FileRecord:
     tags: list[str]
     date_created: str
     date_modified: str
+    # When upsert_file last wrote this row. None for rows indexed before
+    # the column existed (see Index._migrate); callers that care about
+    # index freshness fall back to date_modified in that case.
+    indexed_at: str | None = None
 
 
 class Index:
@@ -119,6 +132,7 @@ class Index:
         self._conn.row_factory = sqlite3.Row
         self._configure()
         self._apply_schema()
+        self._migrate()
 
     # ---- Setup ---------------------------------------------------------
 
@@ -139,6 +153,26 @@ class Index:
     def _apply_schema(self) -> None:
         with self._conn:
             self._conn.executescript(SCHEMA)
+
+    def _migrate(self) -> None:
+        """Apply idempotent, additive schema migrations for older DBs.
+
+        ``CREATE TABLE IF NOT EXISTS`` in :data:`SCHEMA` never alters an
+        existing table, so columns introduced after a vault was first
+        indexed are added here. Each step checks before it acts, so
+        opening an already-current DB is a no-op.
+        """
+        cols = {
+            row["name"]
+            for row in self._conn.execute("PRAGMA table_info(files)").fetchall()
+        }
+        if "indexed_at" not in cols:
+            # Existing rows get NULL; the drift check falls back to
+            # date_modified for them until the next reindex writes a real
+            # value. No backfill here — stamping every legacy row with
+            # "now" would falsely mark genuinely-drifted files as fresh.
+            with self._conn:
+                self._conn.execute("ALTER TABLE files ADD COLUMN indexed_at TEXT")
 
     def close(self) -> None:
         self._conn.close()
@@ -169,6 +203,9 @@ class Index:
             raise ValueError(f"Unknown kind {kind!r}; expected one of {sorted(KINDS)}.")
         aliases_json = json.dumps(aliases or [], ensure_ascii=False)
         tags_json = json.dumps(tags or [], ensure_ascii=False)
+        # Stamp the moment we write this row. Drift detection compares the
+        # file's disk mtime against this, not against date_modified.
+        indexed_at = now_iso()
 
         with self._conn:
             cur = self._conn.execute(
@@ -181,8 +218,8 @@ class Index:
                     """
                     INSERT INTO files
                         (path, kind, project, title, body, aliases,
-                         date_created, date_modified, tags)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         date_created, date_modified, tags, indexed_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         path,
@@ -194,6 +231,7 @@ class Index:
                         date_created,
                         date_modified,
                         tags_json,
+                        indexed_at,
                     ),
                 )
                 file_id = cur.lastrowid
@@ -209,7 +247,8 @@ class Index:
                     """
                     UPDATE files SET
                         kind = ?, project = ?, title = ?, body = ?,
-                        aliases = ?, date_modified = ?, tags = ?
+                        aliases = ?, date_modified = ?, tags = ?,
+                        indexed_at = ?
                     WHERE id = ?
                     """,
                     (
@@ -220,6 +259,7 @@ class Index:
                         aliases_json,
                         date_modified,
                         tags_json,
+                        indexed_at,
                         file_id,
                     ),
                 )
@@ -541,4 +581,5 @@ def _row_to_record(row: sqlite3.Row) -> FileRecord:
         tags=json.loads(row["tags"] or "[]"),
         date_created=row["date_created"],
         date_modified=row["date_modified"],
+        indexed_at=row["indexed_at"],
     )

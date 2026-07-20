@@ -4,6 +4,24 @@ All notable changes to PACE are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] — 2026-07-20
+
+### Fixed
+- **Index-drift warning could never be cleared for hand-edited files.**
+  `check_index_drift` compared a file's on-disk mtime against its
+  indexed `date_modified`, which mirrors frontmatter — but editing a
+  file directly in Obsidian bumps the mtime without touching
+  frontmatter, and `pace reindex` preserves the frontmatter value. So
+  any hand-edited file warned about drift permanently, and the warning's
+  own "Run `pace reindex`" fix hint couldn't resolve it (observed as 22
+  perpetually-drifting files on a production vault). The `files` table
+  now carries an `indexed_at` column stamped on every `upsert_file`, and
+  the drift check compares mtime against that instead — so the warning
+  means "changed since last indexed" and a reindex clears it. Existing
+  databases migrate automatically (additive `ALTER TABLE`); rows written
+  before the column existed fall back to the old `date_modified`
+  comparison until the next reindex backfills them.
+
 ## [0.4.0] — 2026-07-20
 
 ### Added

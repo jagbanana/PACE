@@ -197,12 +197,23 @@ def check_db_integrity(index: Index) -> list[HealthIssue]:
 
 
 def check_index_drift(root: Path, index: Index) -> list[HealthIssue]:
-    """Flag files whose on-disk mtime is newer than the indexed
-    ``date_modified``.
+    """Flag files whose on-disk mtime is newer than when we last indexed them.
 
     The most common cause is the user editing a markdown file directly
     in Obsidian without running ``pace reindex``. We don't auto-fix —
     the LLM may have stale snippets in context, so it's a real warning.
+
+    We compare disk mtime against ``indexed_at`` (set every time
+    ``upsert_file`` runs), *not* against ``date_modified``. A hand-edit
+    in Obsidian bumps the file's mtime but leaves its frontmatter
+    ``date_modified`` alone, and reindex preserves that frontmatter
+    value — so comparing against ``date_modified`` would flag such files
+    forever and ``pace reindex`` (which the fix hint recommends) could
+    never clear the warning. Comparing against ``indexed_at`` makes the
+    warning mean exactly "changed since we last indexed", which a
+    reindex resolves. Rows written before ``indexed_at`` existed have
+    ``None``; they fall back to the old ``date_modified`` comparison
+    until the next reindex backfills a real ``indexed_at``.
 
     Drives off ``index.all_records()`` (one query) plus a cheap
     ``stat`` per file; no file contents are read.
@@ -214,9 +225,10 @@ def check_index_drift(root: Path, index: Index) -> list[HealthIssue]:
             # Stale row; reindex will clean it up. Counted in a separate
             # check would be redundant — not flagged here.
             continue
+        reference = record.indexed_at or record.date_modified
         try:
             mtime = datetime.fromtimestamp(full.stat().st_mtime)
-            indexed = datetime.fromisoformat(record.date_modified)
+            indexed = datetime.fromisoformat(reference)
         except (TypeError, ValueError, OSError):
             continue
         if mtime > indexed + _DRIFT_TOLERANCE:

@@ -97,6 +97,115 @@ def test_index_drift_clean_when_in_sync(vault: Path, index: Index) -> None:
     assert issues == []
 
 
+def test_index_drift_cleared_by_reindex_after_hand_edit(
+    vault: Path, index: Index
+) -> None:
+    """Regression: a reindex must clear drift on a hand-edited file.
+
+    A file edited directly in Obsidian has a fresh disk mtime but a
+    stale frontmatter ``date_modified`` (the edit never touches it).
+    Comparing mtime against ``date_modified`` flagged such files forever
+    and no reindex could clear it. The check now compares against
+    ``indexed_at``, which reindex refreshes.
+    """
+    from pace import vault as vault_ops
+
+    note = vault / LONG_TERM_DIR / "topic.md"
+    stale = "2026-01-01T00:00:00"
+    note.write_text(
+        f"---\ntitle: Topic\nkind: long_term\ndate_created: {stale}\n"
+        f"date_modified: {stale}\ntags: []\n---\n\nHand-written body.\n",
+        encoding="utf-8",
+    )
+    # mtime an hour ago: newer than the stale frontmatter date (so the
+    # old check flagged it), but older than the reindex we run next.
+    hour_ago = time.time() - 3600
+    os.utime(note, (hour_ago, hour_ago))
+
+    vault_ops.reindex(vault, index)
+
+    issues = doctor_ops.check_index_drift(vault, index)
+    assert issues == [], f"reindex should clear drift, got {issues!r}"
+
+
+def test_index_drift_falls_back_to_date_modified_for_legacy_rows(
+    vault: Path, index: Index
+) -> None:
+    """A row indexed before ``indexed_at`` existed (NULL) still compares
+    against ``date_modified`` — preserving behavior until a reindex."""
+    capture(vault, kind="working", content="Legacy entry.", index=index)
+    # Simulate a pre-migration row and push the file's mtime past the
+    # stale frontmatter date so the fallback comparison trips.
+    with index.transaction() as conn:
+        conn.execute(
+            "UPDATE files SET indexed_at = NULL, date_modified = ? "
+            "WHERE path = ?",
+            ("2026-01-01T00:00:00", WORKING_MEMORY),
+        )
+    future = time.time() + 600
+    os.utime(vault / WORKING_MEMORY, (future, future))
+
+    issues = doctor_ops.check_index_drift(vault, index)
+    assert any(i.code == "index-drift" for i in issues)
+
+
+def test_migrate_is_idempotent_on_current_db(vault: Path) -> None:
+    """Opening an already-migrated DB a second time must not error or
+    duplicate the column."""
+    idx = Index(vault / INDEX_DB)
+    try:
+        cols = [
+            row["name"]
+            for row in idx._conn.execute("PRAGMA table_info(files)").fetchall()
+        ]
+        assert cols.count("indexed_at") == 1
+    finally:
+        idx.close()
+
+
+def test_migrate_adds_indexed_at_to_legacy_db(tmp_path: Path) -> None:
+    """A DB whose files table predates indexed_at gets the column added
+    on open, with existing rows left NULL (no false 'fresh' backfill)."""
+    db_path = tmp_path / "legacy.db"
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        """
+        CREATE TABLE files (
+            id INTEGER PRIMARY KEY,
+            path TEXT UNIQUE NOT NULL,
+            kind TEXT NOT NULL,
+            project TEXT,
+            title TEXT NOT NULL,
+            body TEXT NOT NULL,
+            aliases TEXT,
+            date_created TEXT NOT NULL,
+            date_modified TEXT NOT NULL,
+            tags TEXT
+        )
+        """
+    )
+    conn.execute(
+        "INSERT INTO files (path, kind, title, body, date_created, "
+        "date_modified) VALUES ('memories/working_memory.md', 'working', "
+        "'WM', 'x', '2026-01-01T00:00:00', '2026-01-01T00:00:00')"
+    )
+    conn.commit()
+    conn.close()
+
+    idx = Index(db_path)
+    try:
+        cols = {
+            row["name"]
+            for row in idx._conn.execute("PRAGMA table_info(files)").fetchall()
+        }
+        assert "indexed_at" in cols
+        record = idx.get_by_path("memories/working_memory.md")
+        assert record is not None
+        assert record.indexed_at is None  # legacy row not falsely backfilled
+    finally:
+        idx.close()
+
+
 # ---- Broken wikilinks --------------------------------------------------
 
 
