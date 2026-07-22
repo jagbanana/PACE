@@ -102,6 +102,70 @@ def test_status_uninitialized_has_execution_key(
     assert result["execution"] == {"enabled": False}
 
 
+# ---- Signature status line ---------------------------------------------
+
+
+def test_status_signature_healthy_beast_off(mcp_vault: Path) -> None:
+    # Fresh vault with no warnings and Beast Mode off.
+    result = pace_status()
+    # A brand-new vault has no error/warning-severity issues.
+    assert result["signature_status"] == "PACE Status: 🟢 | Beast Mode: ⚪"
+
+
+def test_status_signature_beast_on(mcp_vault: Path) -> None:
+    _write_config(mcp_vault, "execution:\n  enabled: true\n")
+    result = pace_status()
+    assert result["signature_status"].endswith("Beast Mode: 🟢")
+
+
+def test_status_signature_yellow_on_warning(mcp_vault: Path) -> None:
+    # A broken wikilink is warning-severity → PACE Status 🟡.
+    from pace.capture import capture
+    from pace.index import Index
+    from pace.paths import INDEX_DB
+
+    idx = Index(mcp_vault / INDEX_DB)
+    try:
+        capture(
+            mcp_vault,
+            kind="working",
+            content="See [[does-not-exist]] for details.",
+            index=idx,
+        )
+    finally:
+        idx.close()
+    result = pace_status()
+    assert result["signature_status"].startswith("PACE Status: 🟡")
+
+
+def test_status_signature_red_on_error(mcp_vault: Path) -> None:
+    # A OneDrive conflicted-copy file is error-severity → PACE Status 🔴.
+    conflict = (
+        mcp_vault
+        / "memories"
+        / "long_term"
+        / "people (Conflicted Copy 2026-04-01).md"
+    )
+    conflict.parent.mkdir(parents=True, exist_ok=True)
+    conflict.write_text("Conflicted.\n", encoding="utf-8")
+    result = pace_status()
+    assert result["signature_status"].startswith("PACE Status: 🔴")
+
+
+def test_status_signature_null_when_uninitialized(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("PACE_ROOT", str(tmp_path / "uninit"))
+    result = pace_status()
+    assert result["signature_status"] is None
+
+
+def test_template_documents_status_line() -> None:
+    assert "## Status line under your sign-off" in CLAUDE_MD_TEMPLATE
+    assert "signature_status" in CLAUDE_MD_TEMPLATE
+    assert "PACE Status: 🟢 | Beast Mode:" in CLAUDE_MD_TEMPLATE
+
+
 # ---- Per-project overrides & runbooks -----------------------------------
 
 

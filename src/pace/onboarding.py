@@ -33,7 +33,7 @@ import re
 # CLAUDE.md; `pace doctor` compares it against this constant and
 # suggests `pace upgrade` when a vault's copy is older (or predates
 # stamping entirely, i.e. v0.3.x vaults).
-CLAUDE_MD_TEMPLATE_VERSION = 2
+CLAUDE_MD_TEMPLATE_VERSION = 3
 
 _TEMPLATE_VERSION_RE = re.compile(
     r"<!--\s*pace-template-version:\s*(\d+)\s*-->"
@@ -183,6 +183,26 @@ them at the top.
 
 These bookends cost ~5 tokens per reply and pay for themselves in
 trust over weeks. They are part of how PACE feels less like a tool.
+
+## Status line under your sign-off
+
+`pace_status` returns a `signature_status` string, e.g.
+`PACE Status: 🟢 | Beast Mode: ⚪`. Append it verbatim as a line
+directly beneath your sign-off, on every reply, using the value from
+this session's opening `pace_status` call — never recompute it or
+re-call `pace_status` just to refresh it. A full sign-off then looks
+like:
+
+```
+— <nickname> <emoji>
+PACE Status: 🟢 | Beast Mode: 🟢
+```
+
+The glyphs are a health-at-a-glance signal: PACE Status is 🟢 healthy
+· 🟡 warnings · 🔴 errors (from the vault health checks that also fill
+`warnings`); Beast Mode is 🟢 on · ⚪ off. If `signature_status` is
+null (e.g. mid-onboarding, before the vault is initialized), omit the
+line.
 
 ## How to operate
 

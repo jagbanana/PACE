@@ -152,6 +152,30 @@ def _needs_heartbeat(
     return decision.run
 
 
+def _signature_status(
+    report: doctor_ops.HealthReport, *, execution_enabled: bool
+) -> str:
+    """Build the one-line health glyph appended under the agent's sign-off.
+
+    A traffic-light the user reads at a glance, computed once per session
+    (``pace_status`` runs once at session start). PACE Status reflects
+    vault health from the same doctor report that populates ``warnings``:
+    🔴 if any error-severity issue (conflicted copies, DB corruption,
+    OneDrive virtualization), 🟡 if any warning, else 🟢. Beast Mode is
+    🟢 when enabled, ⚪ when off. Kept as a ready-to-echo string so the
+    model spends no tokens deriving it and every PACE agent renders it
+    identically.
+    """
+    if report.errors:
+        pace = "🔴"
+    elif report.warnings:
+        pace = "🟡"
+    else:
+        pace = "🟢"
+    beast = "🟢" if execution_enabled else "⚪"
+    return f"PACE Status: {pace} | Beast Mode: {beast}"
+
+
 def _truncate_working_memory(body: str, hard_chars: int) -> str:
     """Return ``body`` capped at ``hard_chars`` for inclusion in pace_status.
 
@@ -233,6 +257,13 @@ def pace_status() -> dict[str, Any]:
                            default_mode (projects may override via
                            their execution_mode frontmatter). When
                            disabled, ignore that section entirely.
+        signature_status — ready-to-echo one-line health glyph for the
+                           bottom of your sign-off, e.g.
+                           "PACE Status: 🟢 | Beast Mode: ⚪". Append it
+                           verbatim under your sign-off using this
+                           session-start value; don't recompute. null
+                           when uninitialized (mid-onboarding) — omit
+                           the line then. See CLAUDE.md.
         warnings         — list of human-readable issues to raise
 
     Example: ``pace_status()`` — no arguments.
@@ -253,6 +284,7 @@ def pace_status() -> dict[str, Any]:
             "working_memory": "",
             "inbox": [],
             "execution": {"enabled": False},
+            "signature_status": None,
             "warnings": [],
         }
 
@@ -299,6 +331,9 @@ def pace_status() -> dict[str, Any]:
         }
         if settings.execution_enabled
         else {"enabled": False},
+        "signature_status": _signature_status(
+            report, execution_enabled=settings.execution_enabled
+        ),
         "warnings": doctor_ops.report_to_warnings(report),
     }
 
